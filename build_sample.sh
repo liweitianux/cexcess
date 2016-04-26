@@ -6,9 +6,13 @@
 #
 # Aaron LI
 # Created: 2016-03-02
-# Updated: 2016-04-15
+# Updated: 2016-04-26
 #
-# ChangeLog:
+# Changelog:
+# 2016-04-26:
+#   * Add flag "UPDATE_MODE"
+#   * Choose the correct 'img' directory for ZZH's data
+#   * Simplify the argument processing
 # 2016-04-15:
 #   * Add support for zzh's sample
 #   * Convert "_" to "-" in NAME
@@ -16,17 +20,6 @@
 
 analyze_path() {
     # extract `obs_id' and `source name' from path
-    #
-    # Weitian LI <liweitianux@gmail.com>
-    # 2013/02/04
-    #
-    # input:
-    #     path that include `oi' and `source name'
-    #     e.g.:
-    #
-    # output:
-    #
-
     echo "$@" | awk '
     # main part
     {
@@ -69,33 +62,27 @@ analyze_path() {
 }
 
 
-if [ $# -lt 2 ]; then
-    echo "Usage:"
-    echo "    `basename $0` <dest_root_dir> <repro_dir_list>"
-    echo "    `basename $0` <dest_root_dir> <repro_dir1> ..."
-    exit 1
-fi
+case "$1" in
+    -[hH]*)
+        echo "Usage:"
+        echo "    `basename $0` <dest_root_dir> <repro_dir1> ..."
+        exit 1
+        ;;
+esac
+
+UPDATE_MODE="YES"
 
 DEST_ROOT="$1"
-[ ! -d  "${DEST_ROOT}" ] && mkdir -v "${DEST_ROOT}"
-
-# repro dir's
-if [ -f "$2" ]; then
-    REPRO_LIST="$2"
-elif [ -d "$2" ]; then
-    REPRO_LIST="_tmp_repro_$$.list"
-    [ -f "${REPRO_LIST}" ] && mv -f "${REPRO_LIST}" "${REPRO_LIST}_bak"
-    while [ ! -z "$2" ]; do
-        echo "$2" >> "${REPRO_LIST}"
-        shift
-    done
-else
-    echo "ERROR: invalid arguments: $2"
+if [ -n "${UPDATE_MODE}" -a ! -d "${DEST_ROOT}" ]; then
+    echo "UPDATE MODE: '${DEST_ROOT}' dose not exist"
     exit 2
 fi
+[ ! -d  "${DEST_ROOT}" ] && mkdir -v "${DEST_ROOT}"
 
 INIT_DIR=`pwd -P`
-cat "${REPRO_LIST}" | while read repro_dir; do
+while [ ! -z "$2" ]; do
+    repro_dir="$2"
+    shift
     OI=`analyze_path "${repro_dir}" | grep '^oi:' | awk '{ print $2 }'`
     NAME=`analyze_path "${repro_dir}" | grep '^name:' | awk '{ print $2 }'`
     OWNER=`analyze_path "${repro_dir}" | grep '^owner:' | awk '{ print $2 }'`
@@ -104,21 +91,24 @@ cat "${REPRO_LIST}" | while read repro_dir; do
     echo "********* ${NAME}_oi${OI} *********"
     # create directories
     DEST="${DEST_ROOT}/${NAME}_oi${OI}"
-    #[ ! -d "${DEST}/repro" ] && mkdir -pv ${DEST}/repro
-    [ ! -d "${DEST}/repro" ] && continue  # Only update sample
+    if [ -n "${UPDATE_MODE}" -a ! -d "${DEST}/repro" ]; then
+        # skip if dest repro directory does not exist
+        echo "Skipped!"
+        continue
+    fi
+    [ ! -d "${DEST}/repro" ] && mkdir -pv ${DEST}/repro
     cd "${DEST}/repro"
     # simply copy the whole sub-directories
     cp -av ${repro_dir}/acisf*.fits .
     cp -av ${repro_dir}/acisf*.lis ${repro_dir}/pcadf*.fits .
-    cp -av ${repro_dir}/evt ${repro_dir}/bkg ${repro_dir}/img .
     cp -av ${repro_dir}/*_INFO.json .
-    if [ "${OWNER}" = "zzh" ]; then
-        cp -av ${repro_dir}/spc/profile/rspec.reg ./img/
-        cp -av ${repro_dir}/../evt2/spc/profile/rspec.reg ./img/rspec2.reg
-        cp -av ${repro_dir}/../evt2/img/sbprofile.reg ./img/sbprofile2.reg
-        cd ./img
-        [ ! -f "rspec.reg" ] && ln -sv rspec2.reg rspec.reg
-        [ ! -f "sbprofile.reg" ] && ln -sv sbprofile2.reg sbprofile.reg
+    cp -av ${repro_dir}/evt .
+    cp -av ${repro_dir}/bkg .
+    if [ "${OWNER}" = "lwt" ]; then
+        cp -av ${repro_dir}/img .
+    elif [ "${OWNER}" = "zzh" ]; then
+        cp -av ${repro_dir}/../evt2/img .
+        cp -av ${repro_dir}/../evt2/spc/profile/rspec.reg ./img/
     fi
     # apply clean up
     find . \( -iname '*_bak' -o -iname '_tmp*' \) -delete
