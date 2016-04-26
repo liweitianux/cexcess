@@ -6,9 +6,12 @@
 # to fill the config.
 #
 # Aaron LI
-# 2016-04-21
+# Created: 2016-04-21
+# Updated: 2016-04-26
 #
-# ChangeLog:
+# Changelog:
+# 2016-04-26:
+#   * Minor update to output file write
 #
 
 import sys
@@ -89,8 +92,7 @@ def main():
         outfile = os.path.basename(args.config)
 
     sbpfit_conf_new = update_sbpfit_conf(sbpfit_conf, info)
-    with open(outfile, "w") as outf:
-        outf.write("".join(sbpfit_conf_new))
+    open(outfile, "w").write("".join(sbpfit_conf_new))
 
 
 if __name__ == "__main__":
