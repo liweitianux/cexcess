@@ -107,8 +107,14 @@ while [ ! -z "$2" ]; do
     if [ "${OWNER}" = "lwt" ]; then
         cp -av ${repro_dir}/img .
     elif [ "${OWNER}" = "zzh" ]; then
-        cp -av ${repro_dir}/../evt2/img .
-        cp -av ${repro_dir}/../evt2/spc/profile/rspec.reg ./img/
+        img_dir="${repro_dir}/../evt2/img"
+        if [ -f "${img_dir}/sbprofile.txt" ]; then
+            cp -av ${img_dir} .
+            cp -av ${repro_dir}/../evt2/spc/profile/rspec.reg ./img/
+        else
+            echo "WARNING: '${img_dir}/sbprofile.txt' does not exists"
+            cp -av ${repro_dir}/img .
+        fi
     fi
     # apply clean up
     find . \( -iname '*_bak' -o -iname '_tmp*' \) -delete

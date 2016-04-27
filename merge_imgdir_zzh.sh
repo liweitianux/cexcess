@@ -27,9 +27,14 @@ while [ ! -z "$1" ]; do
     cd ${INIT_DIR}
     cd ${repro_dir}
     echo "*** ${PWD} ***"
+    if [ ! -d "${IMG2_DIR}" ]; then
+        echo "WARNING: '${IMG2_DIR}' does not exists; skipped!"
+        continue
+    fi
     # clean ${IMG_DIR} and ${IMG2_DIR}
     ( cd ${IMG_DIR}; \
-        rm -fv _* *.log *bak evt2_*.fits img_*.fits smooth.fits; )
+        rm -fv _* *.log *bak evt2_*.fits img_*.fits smooth.* raw.txt \;
+        rm -fv test* tmp* )
     ( cd ${IMG2_DIR}; \
         rm -fv rspec* sbprofile* radius_sbp.txt flux_sbp.txt )
     # merge
