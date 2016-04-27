@@ -6,15 +6,17 @@
 # in order to visualize the FoV coverage of the observations.
 #
 # Aaron LI
-# 2016-04-22
+# Created: 2016-04-22
+# Updated: 2016-04-27
 #
-# ChangeLog:
+# Changelog:
+# 2016-04-27:
+#   * Do not import the unused "re" module
 #
 
 import sys
 import glob
 import os
-import re
 import json
 import csv
 import argparse
