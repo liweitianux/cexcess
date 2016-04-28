@@ -33,8 +33,9 @@ while [ ! -z "$1" ]; do
     fi
     # clean ${IMG_DIR} and ${IMG2_DIR}
     ( cd ${IMG_DIR}; \
-        rm -fv _* *.log *bak evt2_*.fits img_*.fits smooth.* raw.txt \;
-        rm -fv test* tmp* )
+        rm -fv _* *.log *bak evt2_*.fits img_*.fits \;
+        rm -fv *smooth* *raw* \;
+        rm -fv test* tmp* sources* pntsrc* )
     ( cd ${IMG2_DIR}; \
         rm -fv rspec* sbprofile* radius_sbp.txt flux_sbp.txt )
     # merge
