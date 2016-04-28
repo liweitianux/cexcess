@@ -12,7 +12,7 @@
 # Aaron LI
 # Created: 2016-04-28
 # Updated: 2016-04-28
-# 
+#
 
 import sys
 import os
@@ -86,7 +86,7 @@ def main():
             help="region from which to extract the center coordinate " + \
                  "(default: sbprofile.reg)")
     parser.add_argument("-i", "--infile", dest="infile", required=True,
-            help="input energy-restrict EVT2 used to calculate the C_SB")
+            help="input energy-filtered EVT2 used to calculate the C_SB")
     parser.add_argument("-e", "--expmap", dest="expmap", required=True,
             help="exposure map of the input image")
     parser.add_argument("-o", "--outfile", dest="outfile", required=True,
@@ -111,9 +111,11 @@ def main():
     xc, yc = get_center(args.region)
 
     if args.r500:
+        csb_type = "r500"
         r1 = 0.048 * r500_pix
         r2 = 0.450 * r500_pix
     elif args.kpc:
+        csb_type = "kpc"
         r1 =  40.0 / kpc_per_pix
         r2 = 400.0 / kpc_per_pix
     else:
@@ -145,8 +147,9 @@ def main():
     csb = calc_csb(args.infile, expmap=args.expmap,
             regfile=regfile)
     csb_data = OrderedDict([
-            ("csb_r1",     r1),
-            ("csb_r2",     r2),
+            ("csb_type",    csb_type),
+            ("csb_r1",      r1),
+            ("csb_r2",      r2),
     ])
     csb_data.update(csb)
     csb_data["csb_region"] = csb_region_note
