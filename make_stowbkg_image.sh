@@ -5,7 +5,12 @@
 # Based on `ciao_blanksky.sh' (v5.0; 2015-06-02)
 #
 # Aaron LI
-# 2016-04-20
+# Created: 2016-04-20
+# Updated: 2016-04-28
+#
+# Changelog:
+# 2016-04-28:
+#   * Update keyword "DETNAM" after merge
 #
 
 ## error code {{{
@@ -195,12 +200,14 @@ AI_NUM=`echo ${BKG_LKP} | tr ' ' '\n' | \grep 'acis[0123]iD' | wc -l`
 if [ ${AS_NUM} -eq 1 ]; then
     printf "## ACIS-S, chip: 7\n"
     CCD="7"
+    DETNAM="ACIS-7"
     BKG_ROOT="stowbkg_c7"
     STOWBKG=`lookup_bgstow ${BKG_LKP}`
     cp -v ${STOWBKG} ${BKG_ROOT}_orig.fits
 elif [ ${AI_NUM} -eq 4 ]; then
     printf "## ACIS-I, chip: 0-3\n"
     CCD="0:3"
+    DETNAM="ACIS-0123"
     BKG_ROOT="stowbkg_c0-3"
     AI_FILES=""
     for bkg in ${BKG_LKP}; do
@@ -215,6 +222,10 @@ elif [ ${AI_NUM} -eq 4 ]; then
     # merge 4 chips blanksky evt files
     punlearn dmmerge
     dmmerge "${AI_FILES}" ${BKG_ROOT}_orig.fits clobber=yes
+    # update DETNAM
+    punlearn dmhedit
+    dmhedit infile="${BKG_ROOT}_orig.fits" filelist=none operation=add \
+        key=DETNAM value="${DETNAM}"
     rm -fv `echo ${AI_FILES} | tr ',' ' '`      # remove original files
 else
     printf "## ERROR: UNKNOW blanksky files:\n"
