@@ -10,6 +10,7 @@
 #
 # Changelog:
 # 2016-04-28:
+#   * Use the existing only one bgstow if no proper bgstow found
 #   * Update keyword "DETNAM" after merge
 #
 
@@ -85,8 +86,13 @@ lookup_bgstow() {
         _bgstow=`\ls ${_dir}/${_det}${_year}-??-??bgstow*.fits | grep -v 'bgstow_cti'`
     fi
     if [ -z "${_bgstow}" ]; then
-        echo "ERROR: cannot found bgstow for blanksky: ${_dir}/${_blanksky}" >/dev/stderr
-        exit 100
+        if [ `\ls ${_dir}/${_det}${_year}-??-??bgstow*.fits | wc -l` -eq 1 ]; then
+            _bgstow=`\ls ${_dir}/${_det}${_year}-??-??bgstow*.fits`
+            echo "WARNING: no proper bgstow; but use the only one" > /dev/stderr
+        else
+            echo "ERROR: cannot found bgstow for blanksky: ${_dir}/${_blanksky}" >/dev/stderr
+            exit 100
+        fi
     fi
     echo "${_bgstow}"
     unset _dir _blanksky _det _year _bgstow
