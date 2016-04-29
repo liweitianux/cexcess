@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Calculate the surface brightness cuspiness (i.e., C_{SB}), which
+# Calculate the surface brightness concentration (i.e., C_{SB}), which
 # is an index/indicator of the cool core, and may be defined as:
 #   (1) brightness(<=40kpc) / brightness(<=400kpc)
 #   (2) brightness(<=0.048R500) / brightness(<=0.45R500)
 #
 # References:
-# TODO
+# [1] Santos, J. S., Rosati, P., Tozi, P., et al. 2008, A&A, 483, 35
 #
 # Aaron LI
 # Created: 2016-04-28
-# Updated: 2016-04-28
+# Updated: 2016-04-29
+#
+# Changelog:
+# 2016-04-29:
+#   * Fix C_SB calculation
+#   * Add reference
+#   * Fix "cuspiness" to "concentration"
+#   * Add "name" and "obsid" to results
+# 2016-04-28:
+#   * Add "csb_type" to results
 #
 
 import sys
@@ -39,7 +48,7 @@ def make_csb_region(regfile, center, r1, r2):
     open(regfile, "w").write("\n".join(regions) + "\n")
 
 
-def calc_csb(evt, expmap, regfile):
+def calc_csb(evt, expmap, regfile, r1, r2):
     """
     Calculate the C_SB
     """
@@ -53,7 +62,8 @@ def calc_csb(evt, expmap, regfile):
         csb_s_val = csb_fits["HISTOGRAM"].data["SUR_BRI"]
         csb_s_err = csb_fits["HISTOGRAM"].data["SUR_BRI_ERR"]
     # calculate C_SB and error
-    csb     = csb_s_val[0] / csb_s_val[1] / 100.0
+    area_ratio = (r2 / r1) ** 2
+    csb = csb_s_val[0] / csb_s_val[1] / area_ratio
     csb_err = csb * ((csb_s_err[0] / csb_s_val[0])**2 + \
                      (csb_s_err[1] / csb_s_val[1])**2) ** 0.5
     results = OrderedDict([
@@ -69,7 +79,7 @@ def calc_csb(evt, expmap, regfile):
 
 def main():
     parser = argparse.ArgumentParser(
-            description="Calculate the surface brightness cuspiness")
+            description="Calculate the surface brightness concentration")
     # exclusive argument group for C_SB definition
     grp_csb = parser.add_mutually_exclusive_group(required=True)
     grp_csb.add_argument("-K", "--kpc", dest="kpc", action="store_true",
@@ -101,6 +111,9 @@ def main():
 
     json_str = open(info_json).read().rstrip().rstrip(",")
     info = json.loads(json_str)
+
+    name  = info["Source Name"]
+    obsid = int(info["Obs. ID"])
 
     r500        = get_r500(info)
     r500_kpc    = r500["r500_kpc"]
@@ -145,8 +158,10 @@ def main():
 
     # calculate the C_SB
     csb = calc_csb(args.infile, expmap=args.expmap,
-            regfile=regfile)
+            regfile=regfile, r1=r1, r2=r2)
     csb_data = OrderedDict([
+            ("name",        name),
+            ("obsid",       obsid),
             ("csb_type",    csb_type),
             ("csb_r1",      r1),
             ("csb_r2",      r2),
