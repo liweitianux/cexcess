@@ -15,6 +15,7 @@
 #
 # Changelog:
 # 2016-04-29:
+#   * Fix order of executing ds9 and print message
 #   * Fix C_SB calculation
 #   * Add reference
 #   * Fix "cuspiness" to "concentration"
@@ -139,11 +140,11 @@ def main():
     make_csb_region(regfile, center=(xc, yc), r1=r1, r2=r2)
     # check region with DS9
     if args.no_ask == False:
+        print("Check the C_SB regions; overwrite the region file " + \
+                "'%s' if modified" % regfile, flush=True, file=sys.stderr)
         cmd = "ds9 %s -cmap he " % args.infile + \
               "-regions format ciao -regions %s" % regfile
         subprocess.call(cmd, shell=True)
-        print("Check the C_SB regions; overwrite the region file if modified",
-                flush=True, file=sys.stderr)
         ans = input("C_SB regions exceed CCD (No/yes/modified)? ")
         if ans == "" or ans[0] in "nN":
             csb_region_note = "OK"
