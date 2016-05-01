@@ -3,11 +3,10 @@
 #
 # Aaron LI
 # Created: 2016-04-29
-# Updated: 2016-04-29
+# Updated: 2016-05-01
 #
 # TODO:
 #   * to calculate the PEI error
-#   * to save a plot with the rectangular and interpolation marked
 #
 
 """
@@ -20,11 +19,12 @@ Reference:
 Zhang, C., et al. 2016, ApJ
 """
 
-__version__ = "0.1.0"
-__date__    = "2016-04-29"
+__version__ = "0.2.1"
+__date__    = "2016-05-01"
 
 
 import sys
+import os
 import glob
 import argparse
 import json
@@ -35,7 +35,15 @@ import scipy as sp
 import scipy.interpolate
 import scipy.integrate
 
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+from matplotlib.path import Path
+import matplotlib.patches as patches
+
 from make_r500_regions import get_r500
+
+plt.style.use("ggplot")
 
 
 def calc_pei(data, r500, interp_np=101):
@@ -62,6 +70,7 @@ def calc_pei(data, r500, interp_np=101):
     x1 = np.log10(f1)
     x2 = np.log10(f2)
     # interpolate the power spectrum
+    # FIXME: include a pair surrounding data points for interpolation
     f_interp = sp.interpolate.interp1d(x, y, kind="cubic", assume_sorted=True)
     y1       = f_interp(x1)
     y2       = f_interp(x2)
@@ -80,7 +89,63 @@ def calc_pei(data, r500, interp_np=101):
             "pei_value":  pei_value,
             "pei_err":    None,
     }
-    return results
+    data_interp_log10 = np.column_stack((x_interp, y_interp))
+    return (results, data_interp_log10)
+
+
+def plot_pei(data, data_interp_log10, ax=None, fig=None):
+    """
+    Make a plot to visualize the PEI rectangular.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+    freqs     = data[:, 0]
+    psd1d     = data[:, 1]
+    psd1d_err = data[:, 2]
+    #
+    mask = (freqs > 0.0)
+    xmin = np.min(freqs[mask]) / 1.2
+    xmax = np.max(freqs[mask])
+    ymin = np.min(psd1d[mask]) / 3.0
+    ymax = np.max(psd1d[mask] + psd1d_err[mask]) * 1.2
+    #
+    ax.plot(freqs, psd1d, color="black", linestyle="none",
+            marker="o", markersize=5, alpha=0.7)
+    ax.errorbar(freqs, psd1d, yerr=psd1d_err, fmt="none",
+                ecolor="blue", alpha=0.7)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+    ax.set_title("Radially Averaged Power Spectral Density")
+    ax.set_xlabel(r"k (pixel$^{-1}$)")
+    ax.set_ylabel("Power")
+    # plot the interpolated data points and the PEI rectangle
+    # credit: http://matplotlib.org/users/path_tutorial.html
+    x_interp = 10 ** data_interp_log10[:, 0]
+    y_interp = 10 ** data_interp_log10[:, 1]
+    ax.plot(x_interp, y_interp, linestyle="--", marker="D", markersize=2,
+            color="green", alpha=0.9)
+    vertices = [
+        (x_interp[0],  y_interp[-1]),  # left, bottom
+        (x_interp[0],  y_interp[0]),   # left, top
+        (x_interp[-1], y_interp[0]),   # right, top
+        (x_interp[-1], y_interp[-1]),  # right, bottom
+        (x_interp[0],  y_interp[-1]),  # ignored
+    ]
+    codes = [
+        Path.MOVETO,
+        Path.LINETO,
+        Path.LINETO,
+        Path.LINETO,
+        Path.CLOSEPOLY,
+    ]
+    path = Path(vertices, codes)
+    patch = patches.PathPatch(path, fill=False, color="green", linewidth=2,
+                              alpha=0.9)
+    ax.add_patch(patch)
+    fig.tight_layout()
+    return (fig, ax)
 
 
 def main():
@@ -104,7 +169,12 @@ def main():
             required=False, default=default_outfile,
             help="output json file to save the results " + \
                  "(default: %s)" % default_outfile)
+    parser.add_argument("-p", "--png", dest="png", default=None,
+            help="make PEI plot and save (default: same basename as outfile)")
     args = parser.parse_args()
+
+    if args.png is None:
+        args.png = os.path.splitext(args.outfile)[0] + ".png"
 
     info_json = glob.glob(default_infojson)[0]
     if args.json:
@@ -120,7 +190,7 @@ def main():
     kpc_per_pix = r500["kpc_per_pix"]
 
     psd_data = np.loadtxt(args.infile)
-    pei = calc_pei(psd_data, r500=r500_pix)
+    pei, data_interp_log10 = calc_pei(psd_data, r500=r500_pix)
 
     pei_data = OrderedDict([
             ("name",            name),
@@ -136,6 +206,13 @@ def main():
     pei_data_json = json.dumps(pei_data, indent=2)
     print(pei_data_json)
     open(args.outfile, "w").write(pei_data_json+"\n")
+
+    # Make and save a plot
+    fig = Figure(figsize=(10, 8))
+    canvas = FigureCanvas(fig)
+    ax = fig.add_subplot(111)
+    plot_pei(psd_data, data_interp_log10, ax=ax, fig=fig)
+    fig.savefig(args.png, format="png", dpi=150)
 
 
 if __name__ == "__main__":
