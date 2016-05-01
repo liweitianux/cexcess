@@ -13,9 +13,11 @@
 #
 # Aaron LI <aaronly.me@gmail.com>
 # Created: 2015-04-22
-# Updated: 2016-04-28
+# Updated: 2016-05-01
 #
 # Changelog:
+# 2016-05-01:
+#   * Adjust plot axis limits
 # 2016-04-28:
 #   * Fix wrong meshgrid with respect to the shift zero-frequency component
 #   * Use "numpy.fft" instead of "scipy.fftpack"
@@ -41,8 +43,8 @@
 Compute the radially averaged power spectral density (i.e., power spectrum).
 """
 
-__version__ = "0.5.0"
-__date__    = "2016-04-28"
+__version__ = "0.5.1"
+__date__    = "2016-05-01"
 
 
 import sys
@@ -229,10 +231,11 @@ class PSD:
         if ax is None:
             fig, ax = plt.subplots(1, 1)
         #
-        xmin = self.freqs[1] / 1.2  # ignore the first 0
-        xmax = self.freqs[-1]
-        ymin = np.nanmin(self.psd1d) / 10.0
-        ymax = np.nanmax(self.psd1d + self.psd1d_err)
+        mask = (self.freqs > 0.0)
+        xmin = np.min(self.freqs[mask]) / 1.2
+        xmax = np.max(self.freqs[mask])
+        ymin = np.min(self.psd1d) / 3.0
+        ymax = np.max(self.psd1d[mask] + self.psd1d_err[mask]) * 1.2
         #
         eb = ax.errorbar(self.freqs, self.psd1d, yerr=self.psd1d_err,
                          fmt="none")
@@ -447,4 +450,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
