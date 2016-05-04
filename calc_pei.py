@@ -3,10 +3,10 @@
 #
 # Aaron LI
 # Created: 2016-04-29
-# Updated: 2016-05-02
+# Updated: 2016-05-04
 #
-# TODO:
-#   * to calculate the PEI error
+# FIXME/TODO:
+#   * come up a approach to estimate the PEI error
 #
 
 """
@@ -36,10 +36,10 @@ from matplotlib.figure import Figure
 from matplotlib.path import Path
 import matplotlib.patches as patches
 
-from make_r500_regions import get_r500
+from info import get_r500
 
-__version__ = "0.3.1"
-__date__ = "2016-05-02"
+__version__ = "0.4.0"
+__date__ = "2016-05-04"
 
 plt.style.use("ggplot")
 
@@ -50,17 +50,15 @@ def calc_pei(data, r500, interp_np=101):
     of the lower-left part with respect to the total rectangle.
 
     Arguments:
-      * data: 3-column power spectrum data (frequency, power, power_err)
+      * data: (frequency, power) power spectrum data
       * r500: R500 value in unit of the inverse of the above "frequency"
       * interp_np: number of data points interpolated to calculate PEI
     """
-    freqs = data[:, 0]
-    psd1d = data[:, 1]
+    freqs, psd1d = data
     # frequency values corresponding to 0.35R500 and 0.035R500
     pei_fmin = 1.0 / (0.350 * r500)
     pei_fmax = 1.0 / (0.035 * r500)
     # switch to the logarithmic scale
-    # XXX: how to deal with the errors
     mask = (freqs > 0.0)
     x = np.log10(freqs[mask])
     y = np.log10(psd1d[mask])
@@ -78,13 +76,53 @@ def calc_pei(data, r500, interp_np=101):
     area_below = scipy.integrate.trapz((y_interp-pei_ymin), x_interp)
     pei_value = area_below / area_total
     results = {
-            "area_total": area_total,
-            "area_below": area_below,
-            "pei_value":  pei_value,
-            "pei_err":    None,
+        "area_total": area_total,
+        "area_below": area_below,
+        "pei_value":  pei_value,
     }
     data_interp_log10 = np.column_stack((x_interp, y_interp))
     return (results, data_interp_log10)
+
+
+def estimate_pei_error(data, r500, mctimes, verbose=False):
+    """
+    Estimate the PEI error by Monte Carlo method.
+
+    FIXME:
+    CANNOT randomize the PSD data and just invoke the `calc_pei()` to
+    calculate the PEI value, which may be vastly different to the original
+    *central* value, due to the possible significant change to the PEI
+    rectangle and PSD data points (large PSD errors).
+    """
+    eps = 1.0e-30
+    freqs = data[:, 0]
+    psd1d = data[:, 1]
+    psd1d_err = data[:, 2]
+    psd1d_err[psd1d_err < eps] = eps
+    r500, r500_err = r500
+    if verbose:
+        print("Estimating PEI error by Monte Carlo (%d times) ..." % mctimes,
+              end="", flush=True)
+    pei_results = []
+    for i in range(mctimes):
+        if verbose and i % 100 == 0:
+            print("%d..." % i, end="", flush=True)
+        psd1d_rand = np.random.normal(psd1d, psd1d_err)
+        r500_rand = np.random.normal(r500, r500_err)
+        pei = calc_pei(data=(freqs, psd1d_rand), r500=r500_rand)
+        pei_results.append(pei["pei_value"])
+    pei_mean = np.mean(pei_results)
+    pei_err = np.std(pei_results)
+    pei_q25, pei_median, pei_q75 = np.percentile(pei_results,
+                                                 q=(25, 50, 75))
+    results = {
+        "pei_mean": pei_mean,
+        "pei_median": pei_median,
+        "pei_q25": pei_q25,
+        "pei_q75": pei_q75,
+        "pei_err": pei_err,
+    }
+    return results
 
 
 def plot_pei(data, data_interp_log10, info={}, ax=None, fig=None):
@@ -158,6 +196,7 @@ def main():
     default_infile = "psd.txt"
     default_outfile = "pei.json"
     default_infojson = "../*_INFO.json"
+    # default_mctimes = 1000
 
     parser = argparse.ArgumentParser(
             description="Calculate the power excess index (PEI)",
@@ -165,6 +204,13 @@ def main():
     parser.add_argument("-V", "--version", action="version",
                         version="%(prog)s " + "%s (%s)" % (__version__,
                                                            __date__))
+    # parser.add_argument("-v", "--verbose", dest="verbose",
+    #                     required=False, action="store_true",
+    #                     help="show verbose information")
+    # parser.add_argument("-m", "--mctimes", dest="mctimes", required=False,
+    #                     type=int, default=default_mctimes,
+    #                     help="number of MC times to estimate PEI error " +
+    #                          "(default: %d)" % default_mctimes)
     parser.add_argument("-j", "--json", dest="json", required=False,
                         help="the *_INFO.json file " +
                              "(default: find %s)" % default_infojson)
@@ -193,23 +239,29 @@ def main():
     name = info["Source Name"]
     obsid = int(info["Obs. ID"])
     r500 = get_r500(info)
-    r500_kpc = r500["r500_kpc"]
     r500_pix = r500["r500_pix"]
-    kpc_per_pix = r500["kpc_per_pix"]
+    r500_err_pix = (abs(r500["r500EL_pix"]) + abs(r500["r500EU_pix"])) / 2
 
     psd_data = np.loadtxt(args.infile)
-    pei, data_interp_log10 = calc_pei(psd_data, r500=r500_pix)
+    freqs = psd_data[:, 0]
+    psd1d = psd_data[:, 1]
+    pei, data_interp_log10 = calc_pei(data=(freqs, psd1d), r500=r500_pix)
+    # pei_err = estimate_pei_error(psd_data, r500=(r500_pix, r500_err_pix),
+    #                              mctimes=args.mctimes, verbose=args.verbose)
 
     pei_data = OrderedDict([
-            ("name",            name),
-            ("obsid",           obsid),
-            ("r500_kpc",        r500_kpc),
-            ("r500_pix",        r500_pix),
-            ("kpc_per_pix",     kpc_per_pix),
-            ("area_total",      pei["area_total"]),
-            ("area_below",      pei["area_below"]),
-            ("pei",             pei["pei_value"]),
-            ("pei_err",         pei["pei_err"]),
+        ("name",            name),
+        ("obsid",           obsid),
+        ("r500_pix",        r500_pix),
+        ("r500_err_pix",    r500_err_pix),
+        ("area_total",      pei["area_total"]),
+        ("area_below",      pei["area_below"]),
+        ("pei",             pei["pei_value"]),
+        # ("pei_mean",        pei_err["pei_mean"]),
+        # ("pei_median",      pei_err["pei_median"]),
+        # ("pei_q25",         pei_err["pei_q25"]),
+        # ("pei_q75",         pei_err["pei_q75"]),
+        # ("pei_err",         pei_err),
     ])
     pei_data_json = json.dumps(pei_data, indent=2)
     print(pei_data_json)
