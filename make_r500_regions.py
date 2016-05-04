@@ -7,18 +7,19 @@
 #
 # Aaron LI
 # Created: 2016-04-15
-# Updated: 2016-04-28
+# Updated: 2016-05-04
 #
 # Changelog:
+# 2016-05-04:
+#   * Fix a wrong variable
+#   * PEP8 fixes
 # 2016-04-28:
 #   * Add functions "get_r500()" and "get_center()" for code reuse
 # 2016-04-16:
 #   * Fix R500 unit (convert from kpc to Chandra ACIS pixel)
 #
 
-import sys
 import glob
-import os
 import re
 import json
 import argparse
@@ -30,7 +31,7 @@ def get_r500(info):
     "kpc_per_pix"
     """
     if isinstance(info, str):
-        json_str = open(info_json).read().rstrip().rstrip(",")
+        json_str = open(info).read().rstrip().rstrip(",")
         info = json.loads(json_str)
 
     if "R500 (kpc)" in info.keys():
@@ -45,8 +46,8 @@ def get_r500(info):
     # Convert kpc to Chandra ACIS pixel
     rmax_sbp_pix = float(info["Rmax_SBP (pixel)"])
     rmax_sbp_kpc = float(info["Rmax_SBP (kpc)"])
-    kpc_per_pix  = rmax_sbp_kpc / rmax_sbp_pix
-    r500_pix     = r500_kpc / kpc_per_pix
+    kpc_per_pix = rmax_sbp_kpc / rmax_sbp_pix
+    r500_pix = r500_kpc / kpc_per_pix
 
     results = {
             "r500_kpc":    r500_kpc,
@@ -77,14 +78,15 @@ def frange(x, y, step):
 def main():
     parser = argparse.ArgumentParser(description="Make R500 circle regions")
     parser.add_argument("-j", "--json", dest="json", required=False,
-            help="the *_INFO.json file (default: find ../*_INFO.json)")
+                        help="the *_INFO.json file " +
+                             "(default: find ../*_INFO.json)")
     parser.add_argument("-i", "--regin", dest="regin",
-            required=False, default="sbprofile.reg",
-            help="region from which to extract the center coordinate " + \
-                 "(default: sbprofile.reg)")
+                        required=False, default="sbprofile.reg",
+                        help="region from which to extract the center " +
+                             "coordinate (default: sbprofile.reg)")
     parser.add_argument("-o", "--regout", dest="regout",
-            required=False, default="r500.reg",
-            help="output region filename (default: r500.reg)")
+                        required=False, default="r500.reg",
+                        help="output region filename (default: r500.reg)")
     args = parser.parse_args()
 
     # default "*_INFO.json"
@@ -106,15 +108,14 @@ def main():
             'global color=white width=1 font="helvetica 10 normal roman"',
             'physical',
     ]
-    region_fmt = "circle(%s,%s,{0:.7f}) # text={{{1:.1f} R500 = {2:.1f} pix}}" \
-            % (xc, yc)
-    r500_regions.extend([ region_fmt.format(r500_pix*ratio, ratio,
-                                            r500_pix*ratio)
-                          for ratio in frange(0.1, 1.0, 0.1) ])
+    region_fmt = "circle(%s,%s,{0:.7f}) " % (xc, yc) + \
+                 "# text={{{1:.1f} R500 = {2:.1f} pix}}"
+    r500_regions.extend([region_fmt.format(r500_pix*ratio, ratio,
+                                           r500_pix*ratio)
+                         for ratio in frange(0.1, 1.0, 0.1)])
     with open(args.regout, "w") as outfile:
         outfile.write("\n".join(r500_regions) + "\n")
 
 
 if __name__ == "__main__":
     main()
-
