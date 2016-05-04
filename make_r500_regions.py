@@ -11,6 +11,7 @@
 #
 # Changelog:
 # 2016-05-04:
+#   * Split `get_r500()` function to a separate module `info`
 #   * Fix a wrong variable
 #   * PEP8 fixes
 # 2016-04-28:
@@ -21,40 +22,9 @@
 
 import glob
 import re
-import json
 import argparse
 
-
-def get_r500(info):
-    """
-    Get the R500 value (in unit pixel and kpc), as well as the value of
-    "kpc_per_pix"
-    """
-    if isinstance(info, str):
-        json_str = open(info).read().rstrip().rstrip(",")
-        info = json.loads(json_str)
-
-    if "R500 (kpc)" in info.keys():
-        # LWT's
-        r500_kpc = float(info["R500 (kpc)"])
-    elif "R500" in info.keys():
-        # ZZH's
-        r500_kpc = float(info["R500"])
-    else:
-        raise ValueError("Cannot get R500")
-
-    # Convert kpc to Chandra ACIS pixel
-    rmax_sbp_pix = float(info["Rmax_SBP (pixel)"])
-    rmax_sbp_kpc = float(info["Rmax_SBP (kpc)"])
-    kpc_per_pix = rmax_sbp_kpc / rmax_sbp_pix
-    r500_pix = r500_kpc / kpc_per_pix
-
-    results = {
-            "r500_kpc":    r500_kpc,
-            "r500_pix":    r500_pix,
-            "kpc_per_pix": kpc_per_pix,
-    }
-    return results
+from info import get_r500
 
 
 def get_center(regfile):
