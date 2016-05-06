@@ -7,6 +7,7 @@
 #
 # Changelogs:
 # 2016-05-06:
+#   * Split function `make_sbpfit()` out of `main()`
 #   * Adjust errorbar styles
 #   * Also plot r500 positions of interest with vertical lines
 #   * Adjust plot appearance (e.g., text positions, secondary r500 axis)
@@ -122,7 +123,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from configobj import ConfigObj
 
-__version__ = "0.6.5"
+__version__ = "0.6.6"
 __date__ = "2016-05-06"
 
 plt.style.use("ggplot")
@@ -731,7 +732,7 @@ class SbpFit:
 
 def make_model(config, modelname):
     """
-    Make the model with parameters set according to the config.
+    Make the model with parameters been set according to the `config`.
     """
     if modelname == "sbeta":
         # single-beta model
@@ -751,6 +752,40 @@ def make_model(config, modelname):
                         min=float(value[1]), max=float(value[2]),
                         vary=variable)
     return model
+
+
+def make_sbpfit(config, model, config_model={}):
+    """
+    Make the `SbpFit` instance according the the `config`.
+    """
+    # sbp data and fit object
+    sbpdata = np.loadtxt(config["sbpfile"])
+    sbpfit = SbpFit(model=model, xdata=sbpdata[:, 0], xerr=sbpdata[:, 1],
+                    ydata=sbpdata[:, 2], yerr=sbpdata[:, 3],
+                    xunit=config.get("unit", "pix"))
+    sbpfit.set_source(name=config["name"], obsid=config.get("obsid"),
+                      r500_pix=config.get("r500_pix"),
+                      r500_kpc=config.get("r500_kpc"))
+    # apply data range ignorance
+    if "ignore" in config.keys():
+        for ig in config.as_list("ignore"):
+            xmin, xmax = map(float, ig.split("-"))
+            sbpfit.ignore_data(xmin=xmin, xmax=xmax)
+    if "ignore_r500" in config.keys():
+        for ig in config.as_list("ignore_r500"):
+            xmin, xmax = map(float, ig.split("-"))
+            sbpfit.ignore_data(xmin=xmin, xmax=xmax, unit="r500")
+    # apply additional data range ignorance specified within model section
+    if "ignore" in config_model.keys():
+        for ig in config_model.as_list("ignore"):
+            xmin, xmax = map(float, ig.split("-"))
+            sbpfit.ignore_data(xmin=xmin, xmax=xmax)
+    if "ignore_r500" in config_model.keys():
+        for ig in config_model.as_list("ignore_r500"):
+            xmin, xmax = map(float, ig.split("-"))
+            sbpfit.ignore_data(xmin=xmin, xmax=xmax, unit="r500")
+    #
+    return sbpfit
 
 
 def main():
@@ -791,37 +826,8 @@ def main():
     imgfile = config.get("imgfile")
     imgfile = config_model.get("imgfile", imgfile)
 
-    # SBP fitting model
     model = make_model(config, modelname=modelname)
-
-    # sbp data and fit object
-    sbpdata = np.loadtxt(config["sbpfile"])
-    sbpfit = SbpFit(model=model, xdata=sbpdata[:, 0], xerr=sbpdata[:, 1],
-                    ydata=sbpdata[:, 2], yerr=sbpdata[:, 3],
-                    xunit=config.get("unit", "pix"))
-    sbpfit.set_source(name=config["name"], obsid=config.get("obsid"),
-                      r500_pix=config.get("r500_pix"),
-                      r500_kpc=config.get("r500_kpc"))
-
-    # apply data range ignorance
-    if "ignore" in config.keys():
-        for ig in config.as_list("ignore"):
-            xmin, xmax = map(float, ig.split("-"))
-            sbpfit.ignore_data(xmin=xmin, xmax=xmax)
-    if "ignore_r500" in config.keys():
-        for ig in config.as_list("ignore_r500"):
-            xmin, xmax = map(float, ig.split("-"))
-            sbpfit.ignore_data(xmin=xmin, xmax=xmax, unit="r500")
-
-    # apply additional data range ignorance specified within model section
-    if "ignore" in config_model.keys():
-        for ig in config_model.as_list("ignore"):
-            xmin, xmax = map(float, ig.split("-"))
-            sbpfit.ignore_data(xmin=xmin, xmax=xmax)
-    if "ignore_r500" in config_model.keys():
-        for ig in config_model.as_list("ignore_r500"):
-            xmin, xmax = map(float, ig.split("-"))
-            sbpfit.ignore_data(xmin=xmin, xmax=xmax, unit="r500")
+    sbpfit = make_sbpfit(config, model=model, config_model=config_model)
 
     # fit and calculate confidence intervals
     sbpfit.fit()
