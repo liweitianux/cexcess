@@ -7,6 +7,9 @@
 #
 # Changelogs:
 # 2016-05-06:
+#   * Also plot r500 positions of interest with vertical lines
+#   * Adjust plot appearance (e.g., text positions, secondary r500 axis)
+#   * Simplify `super()` usage
 #   * PEP8 fixes
 # 2016-04-26:
 #   * Reorder some methods of classes 'FitModelSBeta' and 'FitModelDBeta'
@@ -118,7 +121,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from configobj import ConfigObj
 
-__version__ = "0.6.3"
+__version__ = "0.6.4"
 __date__ = "2016-05-06"
 
 plt.style.use("ggplot")
@@ -165,7 +168,7 @@ class FitModel:
         def f_fitted(x):
             return self.func(x, params)
         ydata = f_fitted(xdata)
-        ax.plot(xdata, ydata, 'k-')
+        ax.plot(xdata, ydata, color="black", linestyle="solid")
 
 
 class FitModelSBeta(FitModel):
@@ -181,9 +184,8 @@ class FitModelSBeta(FitModel):
                     ("bkg",  1.0e-9, True, 0.0, 1.0e-7, None))
 
     def __init__(self):
-        super(self.__class__, self).__init__(name="Single-beta",
-                                             func=self.sbeta,
-                                             params=self.params)
+        super().__init__(name="Single-beta", func=self.sbeta,
+                         params=self.params)
 
     @staticmethod
     def sbeta(r, params):
@@ -198,19 +200,22 @@ class FitModelSBeta(FitModel):
         """
         Plot the fitted model, as well as the fitted parameters.
         """
-        super(self.__class__, self).plot(params, xdata, ax)
-        ydata = self.sbeta(xdata, params)
+        super().plot(params, xdata, ax)
+        xmin, xmax = ax.get_xlim()
+        ymin, ymax = ax.get_ylim()
+        ybkg = max(ymin, params["bkg"].value)
         # fitted paramters
-        ax.vlines(x=params["rc"].value, ymin=min(ydata), ymax=max(ydata),
-                  linestyles="dashed")
-        ax.hlines(y=params["bkg"].value, xmin=min(xdata), xmax=max(xdata),
-                  linestyles="dashed")
-        ax.text(x=params["rc"].value, y=min(ydata),
+        ax.vlines(x=params["rc"].value, ymin=ymin, ymax=ymax,
+                  color="gray", linestyles="dashed")
+        ax.hlines(y=params["bkg"].value, xmin=xmin, xmax=xmax,
+                  color="gray", linestyles="dashed")
+        ax.text(x=params["rc"].value/1.1, y=ymin*1.5,
                 s="beta: %.2f\nrc: %.2f" % (params["beta"].value,
-                                            params["rc"].value))
-        ax.text(x=min(xdata), y=min(ydata),
+                                            params["rc"].value),
+                horizontalalignment="right", verticalalignment="bottom")
+        ax.text(x=xmin*1.1, y=ybkg*1.1,
                 s="bkg: %.3e" % params["bkg"].value,
-                verticalalignment="top")
+                verticalalignment="bottom")
 
 
 class FitModelDBeta(FitModel):
@@ -237,9 +242,8 @@ class FitModelDBeta(FitModel):
     params.add("bkg",   value=1.0e-9, min=0.0,  max=1.0e-7)
 
     def __init__(self):
-        super(self.__class__, self).__init__(name="Double-beta",
-                                             func=self.dbeta,
-                                             params=self.params)
+        super().__init__(name="Double-beta", func=self.dbeta,
+                         params=self.params)
 
     @classmethod
     def dbeta(self, r, params):
@@ -273,7 +277,7 @@ class FitModelDBeta(FitModel):
         Plot the fitted model, and each beta component,
         as well as the fitted parameters.
         """
-        super(self.__class__, self).plot(params, xdata, ax)
+        super().plot(params, xdata, ax)
         beta1_ydata = self.beta1(xdata, params)
         beta2_ydata = self.beta2(xdata, params)
         ax.plot(xdata, beta1_ydata, 'b-.')
@@ -320,15 +324,14 @@ class FitModelSBetaNorm(FitModel):
         return s0 * np.power((1 + (r/rc)**2), (0.5 - 3*beta)) + bkg
 
     def __init__(self):
-        super(self.__class__, self).__init__(name="Single-beta",
-                                             func=self.sbeta,
-                                             params=self.params)
+        super().__init__(name="Single-beta", func=self.sbeta,
+                         params=self.params)
 
     def plot(self, params, xdata, ax):
         """
         Plot the fitted model, as well as the fitted parameters.
         """
-        super(self.__class__, self).plot(params, xdata, ax)
+        super().plot(params, xdata, ax)
         ydata = self.sbeta(xdata, params)
         # fitted paramters
         ax.vlines(x=params["rc"].value, ymin=min(ydata), ymax=max(ydata),
@@ -395,16 +398,15 @@ class FitModelDBetaNorm(FitModel):
         return self.beta1(r, params) + self.beta2(r, params)
 
     def __init__(self):
-        super(self.__class__, self).__init__(name="Double-beta",
-                                             func=self.dbeta,
-                                             params=self.params)
+        super().__init__(name="Double-beta", func=self.dbeta,
+                         params=self.params)
 
     def plot(self, params, xdata, ax):
         """
         Plot the fitted model, and each beta component,
         as well as the fitted parameters.
         """
-        super(self.__class__, self).plot(params, xdata, ax)
+        super().plot(params, xdata, ax)
         beta1_ydata = self.beta1(xdata, params)
         beta2_ydata = self.beta2(xdata, params)
         ax.plot(xdata, beta1_ydata, 'b-.')
@@ -646,36 +648,50 @@ class SbpFit:
         # noticed data points
         eb = ax.errorbar(self.xdata[self.mask], self.ydata[self.mask],
                          xerr=self.xerr[self.mask],
-                         yerr=self.yerr[self.mask], fmt="none")
+                         yerr=self.yerr[self.mask],
+                         fmt="none", elinewidth=2, capthick=2)
         # ignored data points
         ignore_mask = np.logical_not(self.mask)
         if np.sum(ignore_mask) > 0:
             eb = ax.errorbar(self.xdata[ignore_mask], self.ydata[ignore_mask],
                              xerr=self.xerr[ignore_mask],
-                             yerr=self.yerr[ignore_mask], fmt="none")
-            eb[-1][0].set_linestyle("-.")
+                             yerr=self.yerr[ignore_mask],
+                             fmt="none", elinewidth=2, capthick=2)
+            eb[-1][0].set_linestyle("dashdot")
+            eb[-1][1].set_linestyle("dashdot")
         # fitted model
+        xmin = 1.0
         xmax = self.xdata[-1] + self.xerr[-1]
-        xpred = np.power(10, np.linspace(0, np.log10(xmax), 2*len(self.xdata)))
+        xpred = np.power(10, np.linspace(0, np.log10(xmax), 3*len(self.xdata)))
         ypred = self.fitted_model(xpred)
-        ymin = min(min(self.ydata), min(ypred))
-        ymax = max(max(self.ydata), max(ypred))
-        self.model.plot(params=self.fitted.params, xdata=xpred, ax=ax)
+        ymin = min(min(self.ydata), min(ypred)) / 1.2
+        ymax = max(max(self.ydata), max(ypred)) * 1.2
         ax.set_xscale("log")
         ax.set_yscale("log")
-        ax.set_xlim(1.0, xmax)
-        ax.set_ylim(ymin/1.2, ymax*1.2)
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
+        self.model.plot(params=self.fitted.params, xdata=xpred, ax=ax)
         name = self.name
         if self.obsid is not None:
             name += "; %s" % self.obsid
         ax.set_title("Fitted Surface Brightness Profile (%s)" % name)
         ax.set_xlabel("Radius (%s)" % self.xunit)
         ax.set_ylabel(r"Surface Brightness (photons/cm$^2$/pixel$^2$/s)")
-        ax.text(x=xmax, y=ymax,
-                s="redchi: %.2f / %.2f = %.2f" % (
+        ax.text(x=xmax/1.2, y=ymax/1.2,
+                s=r"reduced $\chi^2$: %.2f / %.2f = %.2f" % (
                     self.fitted.chisqr, self.fitted.nfree,
                     self.fitted.chisqr/self.fitted.nfree),
                 horizontalalignment="right", verticalalignment="top")
+        try:
+            # also mark r500 positions of interest with vertical lines
+            r500_vlines = [0.05, 0.10, 0.2]
+            vlines_x = [self.convert_unit(x, unit="r500")
+                        for x in r500_vlines]
+            ax.vlines(x=vlines_x, ymin=ymin, ymax=ymax,
+                      color="blue", linestyles="dotted")
+        except ValueError:
+            # cannot convert values from unit "r500"
+            pass
         plot_ret = [fig, ax]
         if r500_axis:
             # Add a second X-axis with labels in unit "r500"
@@ -685,13 +701,23 @@ class SbpFit:
                 ax2 = ax.twiny()
                 # NOTE: the ORDER of the following lines MATTERS
                 ax2.set_xscale(ax.get_xscale())
-                ax2_ticks = ax.get_xticks()
+                # convert main `ax` ticks to be in unit `r500` {{{
+                # ax2_ticks = ax.get_xticks()
+                # ax2.set_xticks(ax2_ticks)
+                # ax2.set_xticklabels(["%.2g" % self.convert_to_r500(x)
+                #                      for x in ax2_ticks])
+                # ax2.set_xlim(ax.get_xlim())
+                # }}}
+                # set new `ax2` to have specified ticks {{{
+                r500_ticks = [0.01, 0.05, 0.1, 0.15, 0.2, 0.5, 1.0]
+                ax2_ticks = np.array([self.convert_unit(x, unit="r500")
+                                      for x in r500_ticks])
                 ax2.set_xticks(ax2_ticks)
-                ax2.set_xbound(ax.get_xbound())
-                ax2.set_xticklabels(["%.2g" % self.convert_to_r500(x)
-                                     for x in ax2_ticks])
+                ax2.set_xticklabels(["%.2f" % x for x in r500_ticks])
+                ax2.set_xlim(ax.get_xlim())
+                # }}}
                 ax2.set_xlabel("Radius (r500; r500 = %s pix = %s kpc)" % (
-                        self.r500_pix, self.r500_kpc))
+                               self.r500_pix, self.r500_kpc))
                 ax2.grid(False)
                 plot_ret.append(ax2)
             except ValueError:
@@ -806,7 +832,7 @@ def main():
     # make and save a plot
     fig = Figure(figsize=(10, 8))
     FigureCanvas(fig)
-    ax = fig.add_subplot(111)
+    ax = fig.add_subplot(1, 1, 1)
     sbpfit.plot(ax=ax, fig=fig, r500_axis=True)
     fig.savefig(imgfile, dpi=150)
 
