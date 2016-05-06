@@ -7,6 +7,7 @@
 #
 # Changelogs:
 # 2016-05-06:
+#   * Adjust errorbar styles
 #   * Also plot r500 positions of interest with vertical lines
 #   * Adjust plot appearance (e.g., text positions, secondary r500 axis)
 #   * Simplify `super()` usage
@@ -121,7 +122,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from configobj import ConfigObj
 
-__version__ = "0.6.4"
+__version__ = "0.6.5"
 __date__ = "2016-05-06"
 
 plt.style.use("ggplot")
@@ -656,9 +657,9 @@ class SbpFit:
             eb = ax.errorbar(self.xdata[ignore_mask], self.ydata[ignore_mask],
                              xerr=self.xerr[ignore_mask],
                              yerr=self.yerr[ignore_mask],
-                             fmt="none", elinewidth=2, capthick=2)
-            eb[-1][0].set_linestyle("dashdot")
-            eb[-1][1].set_linestyle("dashdot")
+                             fmt="none", elinewidth=1, capthick=1)
+            # eb[-1][0].set_linestyle("dashdot")
+            # eb[-1][1].set_linestyle("dashdot")
         # fitted model
         xmin = 1.0
         xmax = self.xdata[-1] + self.xerr[-1]
