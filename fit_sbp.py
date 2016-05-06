@@ -5,8 +5,12 @@
 # Created: 2016-03-13
 # Updated: 2016-05-06
 #
-# Changelogs:
+# Change logs:
 # 2016-05-06:
+#   * Get rid of the argument `config_model` of function `make_sbpfit()`
+#   * Add property `long_name` to models
+#   * Add methods `reset()`, `get_model()`, `dump_params()`, `load_params()`
+#   * Improve `SbpFit.load_data()`
 #   * Split function `make_sbpfit()` out of `main()`
 #   * Adjust errorbar styles
 #   * Also plot r500 positions of interest with vertical lines
@@ -23,12 +27,12 @@
 #   * Support "pix" and "kpc" units
 #   * Allow ignore data w.r.t R500 value
 #   * Major changes to the config syntax
-#   * Add commandline argument to select the sbp model
+#   * Add command line argument to select the sbp model
 # 2016-04-05:
 #   * Allow fix parameters
 # 2016-03-31:
 #   * Remove `ci_report()'
-#   * Add `make_results()' to orgnize all results as s Python dictionary
+#   * Add `make_results()' to organize all results as s Python dictionary
 #   * Report results as json string
 # 2016-03-28:
 #   * Add `main()', `make_model()'
@@ -36,7 +40,7 @@
 #   * Save fit results and plot
 #   * Add `ci_report()'
 # 2016-03-14:
-#   * Refactor classes `FitModelSBeta' and `FitModelDBeta'
+#   * Re-factor classes `FitModelSBeta' and `FitModelDBeta'
 #   * Add matplotlib plot support
 #   * Add `ignore_data()' and `notice_data()' support
 #   * Add classes `FitModelSBetaNorm' and `FitModelDBetaNorm'
@@ -123,7 +127,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from configobj import ConfigObj
 
-__version__ = "0.6.6"
+__version__ = "0.7.0"
 __date__ = "2016-05-06"
 
 plt.style.use("ggplot")
@@ -138,10 +142,12 @@ class FitModel:
     where the `params' is `lmfit.Parameters' instance which contains all
     the model parameters to be fitted, and should be provided as well.
     """
-    def __init__(self, name=None, func=None, params=lmfit.Parameters()):
+    def __init__(self, name=None, long_name=None,
+                 func=None, params=lmfit.Parameters()):
         self.name = name
+        self.long_name = long_name
         self.func = func
-        self.params = params
+        self.params = params.copy()
 
     def f(self, x):
         return self.func(x, self.params)
@@ -162,6 +168,27 @@ class FitModel:
         """
         param = self.params[name]
         param.set(*args, **kwargs)
+
+    def dump_params(self, serialize=True):
+        """
+        Dump the current values/settings for all model parameters,
+        and these dumped results can be later loaded by `load_params()`.
+        """
+        if serialize:
+            return self.params.dumps()
+        else:
+            return self.params.copy()
+
+    def load_params(self, params):
+        """
+        Load the provided parameters values/settings.
+        """
+        if isinstance(params, lmfit.parameter.Parameters):
+            self.params = params.copy()
+        else:
+            p = lmfit.parameter.Parameters()
+            p.loads(params)
+            self.params = p
 
     def plot(self, params, xdata, ax):
         """
@@ -186,8 +213,8 @@ class FitModelSBeta(FitModel):
                     ("bkg",  1.0e-9, True, 0.0, 1.0e-7, None))
 
     def __init__(self):
-        super().__init__(name="Single-beta", func=self.sbeta,
-                         params=self.params)
+        super().__init__(name="sbeta", long_name="Single-beta",
+                         func=self.sbeta, params=self.params)
 
     @staticmethod
     def sbeta(r, params):
@@ -244,8 +271,8 @@ class FitModelDBeta(FitModel):
     params.add("bkg",   value=1.0e-9, min=0.0,  max=1.0e-7)
 
     def __init__(self):
-        super().__init__(name="Double-beta", func=self.dbeta,
-                         params=self.params)
+        super().__init__(name="dbeta", long_name="Double-beta",
+                         func=self.dbeta, params=self.params)
 
     @classmethod
     def dbeta(self, r, params):
@@ -326,8 +353,9 @@ class FitModelSBetaNorm(FitModel):
         return s0 * np.power((1 + (r/rc)**2), (0.5 - 3*beta)) + bkg
 
     def __init__(self):
-        super().__init__(name="Single-beta", func=self.sbeta,
-                         params=self.params)
+        super().__init__(name="sbeta_norm",
+                         long_name="Single-beta normalized",
+                         func=self.sbeta, params=self.params)
 
     def plot(self, params, xdata, ax):
         """
@@ -400,8 +428,9 @@ class FitModelDBetaNorm(FitModel):
         return self.beta1(r, params) + self.beta2(r, params)
 
     def __init__(self):
-        super().__init__(name="Double-beta", func=self.dbeta,
-                         params=self.params)
+        super().__init__(name="dbeta_norm",
+                         long_name="Double-beta normalized",
+                         func=self.dbeta, params=self.params)
 
     def plot(self, params, xdata, ax):
         """
@@ -436,13 +465,40 @@ class SbpFit:
     """
     Class to handle the SBP fitting with single-/double-beta model.
     """
+    # fitting model
+    model = None
+    # optimization method
+    method = None
+    # SBP data
+    xdata = None
+    ydata = None
+    xerr = None
+    yerr = None
+    xunit = None
+    # fitting source information
+    name = None
+    obsid = None
+    r500_pix = None
+    r500_kpc = None
+    kpc_per_pix = None
+    # mask to determine the effective data points used in fitting
+    mask = None
+    # residual function to which apply the optimization
+    f_residual = None
+    fitter = None
+    fitted = None
+    # calculated confidence intervals results
+    ci = None
+    # fitted results including the above `ci` if it is not None
+    results = None
+
     def __init__(self, model, method="lbfgsb",
                  xdata=None, ydata=None, xerr=None, yerr=None, xunit="pix",
                  name=None, obsid=None, r500_pix=None, r500_kpc=None):
         self.method = method
         self.model = model
         self.load_data(xdata=xdata, ydata=ydata, xerr=xerr, yerr=yerr,
-                       xunit=xunit)
+                       xunit=xunit, keep_mask=False)
         self.set_source(name=name, obsid=obsid,
                         r500_pix=r500_pix, r500_kpc=r500_kpc)
 
@@ -465,21 +521,48 @@ class SbpFit:
         except (TypeError, ZeroDivisionError):
             self.kpc_per_pix = -1
 
-    def load_data(self, xdata, ydata, xerr, yerr, xunit="pix"):
-        self.xdata = xdata
-        self.ydata = ydata
-        self.xerr = xerr
-        self.yerr = yerr
-        if xdata is not None:
-            self.mask = np.ones(xdata.shape, dtype=np.bool)
+    def load_data(self, xdata, ydata=None, xerr=None, yerr=None, xunit="pix",
+                  keep_mask=False):
+        if xdata.ndim == 2 and xdata.shape[1] == 4:
+            # 4-column data
+            self.xdata = xdata[:, 0]
+            self.xerr = xdata[:, 1]
+            self.ydata = xdata[:, 2]
+            self.yerr = xdata[:, 3]
         else:
-            self.mask = None
+            self.xdata = xdata
+            self.ydata = ydata
+            self.xerr = xerr
+            self.yerr = yerr
+        #
+        if not keep_mask:
+            if xdata is not None:
+                self.mask = np.ones(xdata.shape, dtype=np.bool)
+            else:
+                self.mask = None
+        #
         if xunit.lower() in ["pix", "pixel"]:
             self.xunit = "pix"
         elif xunit.lower() == "kpc":
             self.xunit = "kpc"
         else:
             raise ValueError("invalid xunit: %s" % xunit)
+
+    def reset(self, keep_source=True):
+        """
+        Reset the SbpFit properties but excluding the model, data, and mask.
+        """
+        self.f_residual = None
+        self.fitter = None
+        self.fitted = None
+        self.ci = None
+        self.results = None
+        if not keep_source:
+            self.name = None
+            self.obsid = None
+            self.r500_pix = None
+            self.r500_kpc = None
+            self.kpc_per_pix = None
 
     def ignore_data(self, xmin=None, xmax=None, unit=None):
         """
@@ -576,7 +659,7 @@ class SbpFit:
             self.set_residual()
         self.fitter = lmfit.Minimizer(self.f_residual, self.model.params)
         self.fitted = self.fitter.minimize(method=method)
-        self.fitted_model = lambda x: self.model.func(x, self.fitted.params)
+        self.model.load_params(self.fitted.params)
 
     def calc_ci(self, sigmas=[0.68, 0.90]):
         # `conf_interval' requires the fitted results have valid `stderr',
@@ -586,6 +669,27 @@ class SbpFit:
         self.ci, self.trace = lmfit.conf_interval(self.fitter, fitted,
                                                   sigmas=sigmas, trace=True)
 
+    def get_model(self):
+        """
+        Return the model associated with this `SbpFit`.
+        If this `SbpFit` instance has been fitted, then the `model` is
+        updated with the fitted parameters, i.e., a fitted model.
+        """
+        return self.model
+
+    def dump_params(self):
+        """
+        Dump the current values/settings for all model parameters,
+        and these dumped results can be later loaded by `load_params()`.
+        """
+        return self.model.dump_params()
+
+    def load_params(self, params):
+        """
+        Load the provided parameters values/settings, and update the model.
+        """
+        self.model.load_params(params)
+
     def make_results(self):
         """
         Make the `self.results' dictionary which contains all the fitting
@@ -594,16 +698,16 @@ class SbpFit:
         fitted = self.fitted
         self.results = OrderedDict()
         # fitting results
-        self.results.update(
-                nfev=fitted.nfev,
-                ndata=fitted.ndata,
-                nvarys=fitted.nvarys,  # number of varible paramters
-                nfree=fitted.nfree,  # degree of freem
-                chisqr=fitted.chisqr,
-                redchi=fitted.redchi,
-                aic=fitted.aic,
-                bic=fitted.bic
-        )
+        self.results.update([
+            ("nfev",   fitted.nfev),
+            ("ndata",  fitted.ndata),
+            ("nvarys", fitted.nvarys),  # number of varible paramters
+            ("nfree",  fitted.nfree),  # degree of freem
+            ("chisqr", fitted.chisqr),
+            ("redchi", fitted.redchi),
+            ("aic",    fitted.aic),
+            ("bic",    fitted.bic),
+        ])
         params = fitted.params
         pnames = list(params.keys())
         pvalues = OrderedDict()
@@ -665,7 +769,7 @@ class SbpFit:
         xmin = 1.0
         xmax = self.xdata[-1] + self.xerr[-1]
         xpred = np.power(10, np.linspace(0, np.log10(xmax), 3*len(self.xdata)))
-        ypred = self.fitted_model(xpred)
+        ypred = self.model.f(xpred)
         ymin = min(min(self.ydata), min(ypred)) / 1.2
         ymax = max(max(self.ydata), max(ypred)) * 1.2
         ax.set_xscale("log")
@@ -754,7 +858,7 @@ def make_model(config, modelname):
     return model
 
 
-def make_sbpfit(config, model, config_model={}):
+def make_sbpfit(config, model):
     """
     Make the `SbpFit` instance according the the `config`.
     """
@@ -776,6 +880,7 @@ def make_sbpfit(config, model, config_model={}):
             xmin, xmax = map(float, ig.split("-"))
             sbpfit.ignore_data(xmin=xmin, xmax=xmax, unit="r500")
     # apply additional data range ignorance specified within model section
+    config_model = config.get(model.name)
     if "ignore" in config_model.keys():
         for ig in config_model.as_list("ignore"):
             xmin, xmax = map(float, ig.split("-"))
@@ -827,7 +932,7 @@ def main():
     imgfile = config_model.get("imgfile", imgfile)
 
     model = make_model(config, modelname=modelname)
-    sbpfit = make_sbpfit(config, model=model, config_model=config_model)
+    sbpfit = make_sbpfit(config, model=model)
 
     # fit and calculate confidence intervals
     sbpfit.fit()
