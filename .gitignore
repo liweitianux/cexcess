@@ -4,9 +4,9 @@
 *.swp
 *.un~
 *_bak
+.#*
 
 # python
 __init__.py
 *.pyc
 **/__pycache__
-
