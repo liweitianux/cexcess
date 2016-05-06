@@ -3,9 +3,11 @@
 #
 # Aaron LI
 # Created: 2016-03-13
-# Updated: 2016-04-26
+# Updated: 2016-05-06
 #
 # Changelogs:
+# 2016-05-06:
+#   * PEP8 fixes
 # 2016-04-26:
 #   * Reorder some methods of classes 'FitModelSBeta' and 'FitModelDBeta'
 #   * Change the output file extension from ".txt" to ".json"
@@ -36,7 +38,6 @@
 #
 # TODO:
 #   * to allow fit the outer beta component, then fix it, and fit the inner one
-#   * to integrate basic information of config file to the output json
 #   * to output the ignored radius range in the same unit as input sbp data
 #
 
@@ -105,13 +106,7 @@ imgfile     = sbpfit_dbeta.png
 -------------------------------------------------
 """
 
-__version__ = "0.6.2"
-__date__    = "2016-04-26"
-
-
-import os
 import sys
-import re
 import argparse
 import json
 from collections import OrderedDict
@@ -123,6 +118,8 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from configobj import ConfigObj
 
+__version__ = "0.6.3"
+__date__ = "2016-05-06"
 
 plt.style.use("ggplot")
 
@@ -165,9 +162,11 @@ class FitModel:
         """
         Plot the fitted model.
         """
-        f_fitted = lambda x: self.func(x, params)
+        def f_fitted(x):
+            return self.func(x, params)
         ydata = f_fitted(xdata)
         ax.plot(xdata, ydata, 'k-')
+
 
 class FitModelSBeta(FitModel):
     """
@@ -175,7 +174,7 @@ class FitModelSBeta(FitModel):
     Single-beta model, with a constant background.
     """
     params = lmfit.Parameters()
-    params.add_many( # (name, value, vary, min, max, expr)
+    params.add_many(  # (name, value, vary, min, max, expr)
                     ("s0",   1.0e-8, True, 0.0, 1.0e-6, None),
                     ("rc",   30.0,   True, 1.0, 1.0e4,  None),
                     ("beta", 0.7,    True, 0.3, 1.1,    None),
@@ -183,15 +182,16 @@ class FitModelSBeta(FitModel):
 
     def __init__(self):
         super(self.__class__, self).__init__(name="Single-beta",
-                func=self.sbeta, params=self.params)
+                                             func=self.sbeta,
+                                             params=self.params)
 
     @staticmethod
     def sbeta(r, params):
         parvals = params.valuesdict()
-        s0   = parvals["s0"]
-        rc   = parvals["rc"]
+        s0 = parvals["s0"]
+        rc = parvals["rc"]
         beta = parvals["beta"]
-        bkg  = parvals["bkg"]
+        bkg = parvals["bkg"]
         return s0 * np.power((1 + (r/rc)**2), (0.5 - 3*beta)) + bkg
 
     def plot(self, params, xdata, ax):
@@ -202,12 +202,12 @@ class FitModelSBeta(FitModel):
         ydata = self.sbeta(xdata, params)
         # fitted paramters
         ax.vlines(x=params["rc"].value, ymin=min(ydata), ymax=max(ydata),
-                linestyles="dashed")
+                  linestyles="dashed")
         ax.hlines(y=params["bkg"].value, xmin=min(xdata), xmax=max(xdata),
-                linestyles="dashed")
+                  linestyles="dashed")
         ax.text(x=params["rc"].value, y=min(ydata),
                 s="beta: %.2f\nrc: %.2f" % (params["beta"].value,
-                    params["rc"].value))
+                                            params["rc"].value))
         ax.text(x=min(xdata), y=min(ydata),
                 s="bkg: %.3e" % params["bkg"].value,
                 verticalalignment="top")
@@ -227,18 +227,19 @@ class FitModelDBeta(FitModel):
     params.add("s01",   value=1.0e-8, min=0.0,  max=1.0e-6)
     params.add("rc1",   value=50.0,   min=10.0, max=1.0e4)
     params.add("beta1", value=0.7,    min=0.3,  max=1.1)
-    #params.add("df_s0", value=1.0e-8, min=0.0,  max=1.0e-6)
-    #params.add("s02",   expr="s01 + df_s0")
+    # params.add("df_s0", value=1.0e-8, min=0.0,  max=1.0e-6)
+    # params.add("s02",   expr="s01 + df_s0")
     params.add("s02",   value=1.0e-8, min=0.0,  max=1.0e-6)
-    #params.add("df_rc", value=30.0,   min=0.0,  max=1.0e4)
-    #params.add("rc2",   expr="rc1 - df_rc")
+    # params.add("df_rc", value=30.0,   min=0.0,  max=1.0e4)
+    # params.add("rc2",   expr="rc1 - df_rc")
     params.add("rc2",   value=20.0,   min=1.0,  max=5.0e2)
     params.add("beta2", value=0.7,    min=0.3,  max=1.1)
     params.add("bkg",   value=1.0e-9, min=0.0,  max=1.0e-7)
 
     def __init__(self):
         super(self.__class__, self).__init__(name="Double-beta",
-                func=self.dbeta, params=self.params)
+                                             func=self.dbeta,
+                                             params=self.params)
 
     @classmethod
     def dbeta(self, r, params):
@@ -250,10 +251,10 @@ class FitModelDBeta(FitModel):
         This beta component describes the main/outer part of the SBP.
         """
         parvals = params.valuesdict()
-        s01   = parvals["s01"]
-        rc1   = parvals["rc1"]
+        s01 = parvals["s01"]
+        rc1 = parvals["rc1"]
         beta1 = parvals["beta1"]
-        bkg   = parvals["bkg"]
+        bkg = parvals["bkg"]
         return s01 * np.power((1 + (r/rc1)**2), (0.5 - 3*beta1)) + bkg
 
     @staticmethod
@@ -262,8 +263,8 @@ class FitModelDBeta(FitModel):
         This beta component describes the central/excess part of the SBP.
         """
         parvals = params.valuesdict()
-        s02   = parvals["s02"]
-        rc2   = parvals["rc2"]
+        s02 = parvals["s02"]
+        rc2 = parvals["rc2"]
         beta2 = parvals["beta2"]
         return s02 * np.power((1 + (r/rc2)**2), (0.5 - 3*beta2))
 
@@ -280,17 +281,17 @@ class FitModelDBeta(FitModel):
         # fitted paramters
         ydata = beta1_ydata + beta2_ydata
         ax.vlines(x=params["rc1"].value, ymin=min(ydata), ymax=max(ydata),
-                linestyles="dashed")
+                  linestyles="dashed")
         ax.vlines(x=params["rc2"].value, ymin=min(ydata), ymax=max(ydata),
-                linestyles="dashed")
+                  linestyles="dashed")
         ax.hlines(y=params["bkg"].value, xmin=min(xdata), xmax=max(xdata),
-                linestyles="dashed")
+                  linestyles="dashed")
         ax.text(x=params["rc1"].value, y=min(ydata),
                 s="beta1: %.2f\nrc1: %.2f" % (params["beta1"].value,
-                    params["rc1"].value))
+                                              params["rc1"].value))
         ax.text(x=params["rc2"].value, y=min(ydata),
                 s="beta2: %.2f\nrc2: %.2f" % (params["beta2"].value,
-                    params["rc2"].value))
+                                              params["rc2"].value))
         ax.text(x=min(xdata), y=min(ydata),
                 s="bkg: %.3e" % params["bkg"].value,
                 verticalalignment="top")
@@ -303,7 +304,7 @@ class FitModelSBetaNorm(FitModel):
     Normalized the `s0' and `bkg' parameters by take the logarithm.
     """
     params = lmfit.Parameters()
-    params.add_many( # (name, value, vary, min, max, expr)
+    params.add_many(  # (name, value, vary, min, max, expr)
                     ("log10_s0",   -8.0, True, -12.0, -6.0,  None),
                     ("rc",   30.0, True, 1.0,   1.0e4, None),
                     ("beta", 0.7,  True, 0.3,   1.1,   None),
@@ -312,15 +313,16 @@ class FitModelSBetaNorm(FitModel):
     @staticmethod
     def sbeta(r, params):
         parvals = params.valuesdict()
-        s0   = 10 ** parvals["log10_s0"]
-        rc   = parvals["rc"]
+        s0 = 10 ** parvals["log10_s0"]
+        rc = parvals["rc"]
         beta = parvals["beta"]
-        bkg  = 10 ** parvals["log10_bkg"]
+        bkg = 10 ** parvals["log10_bkg"]
         return s0 * np.power((1 + (r/rc)**2), (0.5 - 3*beta)) + bkg
 
     def __init__(self):
         super(self.__class__, self).__init__(name="Single-beta",
-                func=self.sbeta, params=self.params)
+                                             func=self.sbeta,
+                                             params=self.params)
 
     def plot(self, params, xdata, ax):
         """
@@ -330,12 +332,12 @@ class FitModelSBetaNorm(FitModel):
         ydata = self.sbeta(xdata, params)
         # fitted paramters
         ax.vlines(x=params["rc"].value, ymin=min(ydata), ymax=max(ydata),
-                linestyles="dashed")
+                  linestyles="dashed")
         ax.hlines(y=(10 ** params["bkg"].value), xmin=min(xdata),
-                xmax=max(xdata), linestyles="dashed")
+                  xmax=max(xdata), linestyles="dashed")
         ax.text(x=params["rc"].value, y=min(ydata),
                 s="beta: %.2f\nrc: %.2f" % (params["beta"].value,
-                    params["rc"].value))
+                                            params["rc"].value))
         ax.text(x=min(xdata), y=min(ydata),
                 s="bkg: %.3e" % (10 ** params["bkg"].value),
                 verticalalignment="top")
@@ -356,11 +358,11 @@ class FitModelDBetaNorm(FitModel):
     params.add("log10_s01",   value=-8.0, min=-12.0, max=-6.0)
     params.add("rc1",   value=50.0, min=10.0,  max=1.0e4)
     params.add("beta1", value=0.7,  min=0.3,   max=1.1)
-    #params.add("df_s0", value=1.0e-8, min=0.0, max=1.0e-6)
-    #params.add("s02",   expr="s01 + df_s0")
+    # params.add("df_s0", value=1.0e-8, min=0.0, max=1.0e-6)
+    # params.add("s02",   expr="s01 + df_s0")
     params.add("log10_s02",   value=-8.0, min=-12.0, max=-6.0)
-    #params.add("df_rc", value=30.0, min=0.0,   max=1.0e4)
-    #params.add("rc2",   expr="rc1 - df_rc")
+    # params.add("df_rc", value=30.0, min=0.0,   max=1.0e4)
+    # params.add("rc2",   expr="rc1 - df_rc")
     params.add("rc2",   value=20.0, min=1.0,   max=5.0e2)
     params.add("beta2", value=0.7,  min=0.3,   max=1.1)
     params.add("log10_bkg",   value=-9.0, min=-12.0, max=-7.0)
@@ -371,10 +373,10 @@ class FitModelDBetaNorm(FitModel):
         This beta component describes the main/outer part of the SBP.
         """
         parvals = params.valuesdict()
-        s01   = 10 ** parvals["log10_s01"]
-        rc1   = parvals["rc1"]
+        s01 = 10 ** parvals["log10_s01"]
+        rc1 = parvals["rc1"]
         beta1 = parvals["beta1"]
-        bkg   = 10 ** parvals["log10_bkg"]
+        bkg = 10 ** parvals["log10_bkg"]
         return s01 * np.power((1 + (r/rc1)**2), (0.5 - 3*beta1)) + bkg
 
     @staticmethod
@@ -383,8 +385,8 @@ class FitModelDBetaNorm(FitModel):
         This beta component describes the central/excess part of the SBP.
         """
         parvals = params.valuesdict()
-        s02   = 10 ** parvals["log10_s02"]
-        rc2   = parvals["rc2"]
+        s02 = 10 ** parvals["log10_s02"]
+        rc2 = parvals["rc2"]
         beta2 = parvals["beta2"]
         return s02 * np.power((1 + (r/rc2)**2), (0.5 - 3*beta2))
 
@@ -394,7 +396,8 @@ class FitModelDBetaNorm(FitModel):
 
     def __init__(self):
         super(self.__class__, self).__init__(name="Double-beta",
-                func=self.dbeta, params=self.params)
+                                             func=self.dbeta,
+                                             params=self.params)
 
     def plot(self, params, xdata, ax):
         """
@@ -408,18 +411,18 @@ class FitModelDBetaNorm(FitModel):
         ax.plot(xdata, beta2_ydata, 'b-.')
         # fitted paramters
         ydata = beta1_ydata + beta2_ydata
-        ax.vlines(x=params["log10_rc1"].value, ymin=min(ydata), ymax=max(ydata),
-                linestyles="dashed")
+        ax.vlines(x=params["log10_rc1"].value, ymin=min(ydata),
+                  ymax=max(ydata), linestyles="dashed")
         ax.vlines(x=params["rc2"].value, ymin=min(ydata), ymax=max(ydata),
-                linestyles="dashed")
+                  linestyles="dashed")
         ax.hlines(y=(10 ** params["bkg"].value), xmin=min(xdata),
-                xmax=max(xdata), linestyles="dashed")
+                  xmax=max(xdata), linestyles="dashed")
         ax.text(x=params["rc1"].value, y=min(ydata),
                 s="beta1: %.2f\nrc1: %.2f" % (params["beta1"].value,
-                    params["rc1"].value))
+                                              params["rc1"].value))
         ax.text(x=params["rc2"].value, y=min(ydata),
                 s="beta2: %.2f\nrc2: %.2f" % (params["beta2"].value,
-                    params["rc2"].value))
+                                              params["rc2"].value))
         ax.text(x=min(xdata), y=min(ydata),
                 s="bkg: %.3e" % (10 ** params["bkg"].value),
                 verticalalignment="top")
@@ -430,14 +433,14 @@ class SbpFit:
     Class to handle the SBP fitting with single-/double-beta model.
     """
     def __init__(self, model, method="lbfgsb",
-            xdata=None, ydata=None, xerr=None, yerr=None, xunit="pix",
-            name=None, obsid=None, r500_pix=None, r500_kpc=None):
+                 xdata=None, ydata=None, xerr=None, yerr=None, xunit="pix",
+                 name=None, obsid=None, r500_pix=None, r500_kpc=None):
         self.method = method
         self.model = model
         self.load_data(xdata=xdata, ydata=ydata, xerr=xerr, yerr=yerr,
-                xunit=xunit)
-        self.set_source(name=name, obsid=obsid, r500_pix=r500_pix,
-                r500_kpc=r500_kpc)
+                       xunit=xunit)
+        self.set_source(name=name, obsid=obsid,
+                        r500_pix=r500_pix, r500_kpc=r500_kpc)
 
     def set_source(self, name, obsid=None, r500_pix=None, r500_kpc=None):
         self.name = name
@@ -461,8 +464,8 @@ class SbpFit:
     def load_data(self, xdata, ydata, xerr, yerr, xunit="pix"):
         self.xdata = xdata
         self.ydata = ydata
-        self.xerr  = xerr
-        self.yerr  = yerr
+        self.xerr = xerr
+        self.yerr = yerr
         if xdata is not None:
             self.mask = np.ones(xdata.shape, dtype=np.bool)
         else:
@@ -526,9 +529,9 @@ class SbpFit:
         """
         if unit == self.xunit:
             return x
-        elif (unit == "pix")  and (self.xunit == "kpc"):
+        elif (unit == "pix") and (self.xunit == "kpc"):
             return (x / self.r500_pix * self.r500_kpc)
-        elif (unit == "kpc")  and (self.xunit == "pix"):
+        elif (unit == "kpc") and (self.xunit == "pix"):
             return (x / self.r500_kpc * self.r500_pix)
         elif (unit == "r500") and (self.xunit == "pix"):
             return (x * self.r500_pix)
@@ -558,7 +561,7 @@ class SbpFit:
                 return self.model.func(self.xdata[self.mask], params) - \
                         self.ydata
             else:
-                return (self.model.func(self.xdata[self.mask], params) - \
+                return (self.model.func(self.xdata[self.mask], params) -
                         self.ydata[self.mask]) / self.yerr[self.mask]
         self.f_residual = f_residual
 
@@ -575,9 +578,9 @@ class SbpFit:
         # `conf_interval' requires the fitted results have valid `stderr',
         # so we need to re-fit the model with method `leastsq'.
         fitted = self.fitter.minimize(method="leastsq",
-                params=self.fitted.params)
+                                      params=self.fitted.params)
         self.ci, self.trace = lmfit.conf_interval(self.fitter, fitted,
-                sigmas=sigmas, trace=True)
+                                                  sigmas=sigmas, trace=True)
 
     def make_results(self):
         """
@@ -586,16 +589,17 @@ class SbpFit:
         """
         fitted = self.fitted
         self.results = OrderedDict()
-        ## fitting results
+        # fitting results
         self.results.update(
-                nfev   = fitted.nfev,
-                ndata  = fitted.ndata,
-                nvarys = fitted.nvarys,  # number of varible paramters
-                nfree  = fitted.nfree,  # degree of freem
-                chisqr = fitted.chisqr,
-                redchi = fitted.redchi,
-                aic    = fitted.aic,
-                bic    = fitted.bic)
+                nfev=fitted.nfev,
+                ndata=fitted.ndata,
+                nvarys=fitted.nvarys,  # number of varible paramters
+                nfree=fitted.nfree,  # degree of freem
+                chisqr=fitted.chisqr,
+                redchi=fitted.redchi,
+                aic=fitted.aic,
+                bic=fitted.bic
+        )
         params = fitted.params
         pnames = list(params.keys())
         pvalues = OrderedDict()
@@ -603,26 +607,26 @@ class SbpFit:
             par = params.get(pn)
             pvalues[pn] = [par.value, par.min, par.max, par.vary]
         self.results["params"] = pvalues
-        ## confidence intervals
+        # confidence intervals
         if hasattr(self, "ci") and self.ci is not None:
             ci = self.ci
             ci_values = OrderedDict()
-            ci_sigmas = [ "ci%02d" % (v[0]*100) for v in ci.get(pnames[0]) ]
+            ci_sigmas = ["ci%02d" % (v[0]*100) for v in ci.get(pnames[0])]
             ci_names = sorted(list(set(ci_sigmas)))
-            ci_idx = { k: [] for k in ci_names }
+            ci_idx = {k: [] for k in ci_names}
             for cn, idx in zip(ci_sigmas, range(len(ci_sigmas))):
                 ci_idx[cn].append(idx)
             # parameters ci
             for pn in pnames:
                 ci_pv = OrderedDict()
-                pv = [ v[1] for v in ci.get(pn) ]
+                pv = [v[1] for v in ci.get(pn)]
                 # best
-                pv_best = pv[ ci_idx["ci00"][0] ]
+                pv_best = pv[ci_idx["ci00"][0]]
                 ci_pv["best"] = pv_best
                 # ci of each sigma
-                pv2 = [ v-pv_best for v in pv ]
+                pv2 = [v-pv_best for v in pv]
                 for cn in ci_names[1:]:
-                    ci_pv[cn] = [ pv2[idx] for idx in ci_idx[cn] ]
+                    ci_pv[cn] = [pv2[idx] for idx in ci_idx[cn]]
                 ci_values[pn] = ci_pv
             self.results["ci"] = ci_values
 
@@ -641,14 +645,14 @@ class SbpFit:
             fig, ax = plt.subplots(1, 1)
         # noticed data points
         eb = ax.errorbar(self.xdata[self.mask], self.ydata[self.mask],
-                xerr=self.xerr[self.mask], yerr=self.yerr[self.mask],
-                fmt="none")
+                         xerr=self.xerr[self.mask],
+                         yerr=self.yerr[self.mask], fmt="none")
         # ignored data points
         ignore_mask = np.logical_not(self.mask)
         if np.sum(ignore_mask) > 0:
             eb = ax.errorbar(self.xdata[ignore_mask], self.ydata[ignore_mask],
-                    xerr=self.xerr[ignore_mask], yerr=self.yerr[ignore_mask],
-                    fmt="none")
+                             xerr=self.xerr[ignore_mask],
+                             yerr=self.yerr[ignore_mask], fmt="none")
             eb[-1][0].set_linestyle("-.")
         # fitted model
         xmax = self.xdata[-1] + self.xerr[-1]
@@ -668,8 +672,9 @@ class SbpFit:
         ax.set_xlabel("Radius (%s)" % self.xunit)
         ax.set_ylabel(r"Surface Brightness (photons/cm$^2$/pixel$^2$/s)")
         ax.text(x=xmax, y=ymax,
-                s="redchi: %.2f / %.2f = %.2f" % (self.fitted.chisqr,
-                    self.fitted.nfree, self.fitted.chisqr/self.fitted.nfree),
+                s="redchi: %.2f / %.2f = %.2f" % (
+                    self.fitted.chisqr, self.fitted.nfree,
+                    self.fitted.chisqr/self.fitted.nfree),
                 horizontalalignment="right", verticalalignment="top")
         plot_ret = [fig, ax]
         if r500_axis:
@@ -683,9 +688,9 @@ class SbpFit:
                 ax2_ticks = ax.get_xticks()
                 ax2.set_xticks(ax2_ticks)
                 ax2.set_xbound(ax.get_xbound())
-                ax2.set_xticklabels([ "%.2g" % self.convert_to_r500(x)
-                                    for x in ax2_ticks ])
-                ax2.set_xlabel("Radius (r500; r500 = %s pix = %s kpc)" % (\
+                ax2.set_xticklabels(["%.2g" % self.convert_to_r500(x)
+                                     for x in ax2_ticks])
+                ax2.set_xlabel("Radius (r500; r500 = %s pix = %s kpc)" % (
                         self.r500_pix, self.r500_kpc))
                 ax2.grid(False)
                 plot_ret.append(ax2)
@@ -716,25 +721,29 @@ def make_model(config, modelname):
         if len(value) == 4 and value[3].upper() in ["FIXED", "FALSE"]:
             variable = False
         model.set_param(name=p, value=float(value[0]),
-                min=float(value[1]), max=float(value[2]), vary=variable)
+                        min=float(value[1]), max=float(value[2]),
+                        vary=variable)
     return model
 
 
 def main():
     # parser for command line options and arguments
     parser = argparse.ArgumentParser(
-            description="Fit surface brightness profile with " + \
+            description="Fit surface brightness profile with " +
                         "single-/double-beta model",
             epilog="Version: %s (%s)" % (__version__, __date__))
     parser.add_argument("-V", "--version", action="version",
-            version="%(prog)s " + "%s (%s)" % (__version__, __date__))
+                        version="%(prog)s " +
+                                "%s (%s)" % (__version__, __date__))
     parser.add_argument("config", help="Config file for SBP fitting")
     # exclusive argument group for model selection
     grp_model = parser.add_mutually_exclusive_group(required=False)
     grp_model.add_argument("-s", "--sbeta", dest="sbeta",
-            action="store_true", help="single-beta model for SBP")
+                           action="store_true",
+                           help="single-beta model for SBP")
     grp_model.add_argument("-d", "--dbeta", dest="dbeta",
-            action="store_true", help="double-beta model for SBP")
+                           action="store_true",
+                           help="double-beta model for SBP")
     #
     args = parser.parse_args()
 
@@ -761,10 +770,11 @@ def main():
     # sbp data and fit object
     sbpdata = np.loadtxt(config["sbpfile"])
     sbpfit = SbpFit(model=model, xdata=sbpdata[:, 0], xerr=sbpdata[:, 1],
-            ydata=sbpdata[:, 2], yerr=sbpdata[:, 3],
-            xunit=config.get("unit", "pix"))
+                    ydata=sbpdata[:, 2], yerr=sbpdata[:, 3],
+                    xunit=config.get("unit", "pix"))
     sbpfit.set_source(name=config["name"], obsid=config.get("obsid"),
-            r500_pix=config.get("r500_pix"), r500_kpc=config.get("r500_kpc"))
+                      r500_pix=config.get("r500_pix"),
+                      r500_kpc=config.get("r500_kpc"))
 
     # apply data range ignorance
     if "ignore" in config.keys():
@@ -795,7 +805,7 @@ def main():
 
     # make and save a plot
     fig = Figure(figsize=(10, 8))
-    canvas = FigureCanvas(fig)
+    FigureCanvas(fig)
     ax = fig.add_subplot(111)
     sbpfit.plot(ax=ax, fig=fig, r500_axis=True)
     fig.savefig(imgfile, dpi=150)
