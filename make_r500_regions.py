@@ -47,6 +47,8 @@ def frange(x, y, step):
 
 def main():
     parser = argparse.ArgumentParser(description="Make R500 circle regions")
+    parser.add_argument("-c", "--core", dest="core", action="store_true",
+                        help="only consider core: (0.05, 0.1, 0.2, 0.3)R500")
     parser.add_argument("-j", "--json", dest="json", required=False,
                         help="the *_INFO.json file " +
                              "(default: find ../*_INFO.json)")
@@ -72,17 +74,23 @@ def main():
     # get center coordinate
     xc, yc = get_center(args.regin)
 
-    # output region
+    # make r500 regions
+    region_fmt = "circle(%s,%s,{0:.7f}) " % (xc, yc) + \
+                 "# text={{{1:.2f} R500 = {2:.1f} pix}}"
     r500_regions = [
             '# Region file format: DS9 version 4.1',
             'global color=white width=1 font="helvetica 10 normal roman"',
             'physical',
     ]
-    region_fmt = "circle(%s,%s,{0:.7f}) " % (xc, yc) + \
-                 "# text={{{1:.1f} R500 = {2:.1f} pix}}"
-    r500_regions.extend([region_fmt.format(r500_pix*ratio, ratio,
-                                           r500_pix*ratio)
-                         for ratio in frange(0.1, 1.0, 0.1)])
+    if args.core:
+        # only consider core regions
+        r500_regions.extend([region_fmt.format(r500_pix*ratio, ratio,
+                                               r500_pix*ratio)
+                            for ratio in (0.05, 0.1, 0.2, 0.3)])
+    else:
+        r500_regions.extend([region_fmt.format(r500_pix*ratio, ratio,
+                                               r500_pix*ratio)
+                            for ratio in frange(0.1, 1.0, 0.1)])
     with open(args.regout, "w") as outfile:
         outfile.write("\n".join(r500_regions) + "\n")
 
