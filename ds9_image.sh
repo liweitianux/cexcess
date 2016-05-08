@@ -5,14 +5,16 @@
 # Also touch the output image filename for easier save.
 #
 # Aaron LI
-# 2016-04-16
+# Created: 2016-04-16
+# Updated: 2016-05-08
 #
 
 # Default parameters
 FILE_PATTERN="img_c*_fill.fits"
-REG_FILE="r500.reg"
-REG_FORMAT="ds9"
-REG_FOV="skyfov.fits"
+REG_FILE=${REG_FILE:-r500.reg}
+REG_FORMAT=${REG_FORMAT:-ds9}
+REG_FOV=${REG_FOV:-skyfov.fits}
+SMOOTH_RADIUS=${SMOOTH_RADIUS:-4}
 
 
 case "$1" in
@@ -90,7 +92,7 @@ while [ ! -z "$1" ]; do
     #
     ds9 ${FILE} \
         -bin factor 1 \
-        -smooth radius 4 -smooth yes \
+        -smooth radius ${SMOOTH_RADIUS} -smooth yes \
         -scale asinh \
         -cmap sls \
         -geometry 1288x1026-0+0 \
@@ -99,4 +101,3 @@ while [ ! -z "$1" ]; do
     #
     cd ${INIT_DIR}
 done
-
