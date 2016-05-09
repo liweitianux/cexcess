@@ -13,9 +13,11 @@
 #
 # Aaron LI <aaronly.me@gmail.com>
 # Created: 2015-04-22
-# Updated: 2016-05-01
+# Updated: 2016-05-09
 #
-# Changelog:
+# Change log:
+# 2016-05-09:
+#   * PEP8 fixes
 # 2016-05-01:
 #   * Adjust plot axis limits
 # 2016-04-28:
@@ -38,16 +40,15 @@
 #   * Encapsulate the functions within class 'PSD'
 #   * Update docs/comments
 #
+# TODO/FIXME:
+#   * subtract background with normalization factor (w.r.t particle background)
+#     considered
+#
 
 """
 Compute the radially averaged power spectral density (i.e., power spectrum).
 """
 
-__version__ = "0.5.1"
-__date__    = "2016-05-01"
-
-
-import sys
 import os
 import argparse
 
@@ -57,6 +58,9 @@ from astropy.io import fits
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+
+__version__ = "0.5.2"
+__date__ = "2016-05-01"
 
 plt.style.use("ggplot")
 
@@ -75,8 +79,8 @@ class PSD:
     # 2D power spectral density
     psd2d = None
     # 1D (radially averaged) power spectral density
-    freqs     = None
-    psd1d     = None
+    freqs = None
+    psd1d = None
     psd1d_err = None
 
     def __init__(self, img, pixel=(1.0, "pixel"), normalize=True):
@@ -101,9 +105,9 @@ class PSD:
         """
         if verbose:
             print("Calculating 2D power spectral density ... ",
-                    end="", flush=True)
+                  end="", flush=True)
         rows, cols = self.img.shape
-        ## Compute the power spectral density (i.e., power spectrum)
+        # Compute the power spectral density (i.e., power spectrum)
         imgf = np.fft.fftshift(np.fft.fft2(self.img))
         if self.normalize:
             norm = rows * cols * self.pixel[0]**2
@@ -128,37 +132,36 @@ class PSD:
         """
         if verbose:
             print("Calculating radial (1D) power spectral density ... ",
-                    end="", flush=True)
+                  end="", flush=True)
         if verbose:
             print("padding ... ", end="", flush=True)
-        psd2d    = self.pad_square(self.psd2d, value=np.nan)
-        dim      = psd2d.shape[0]
+        psd2d = self.pad_square(self.psd2d, value=np.nan)
+        dim = psd2d.shape[0]
         dim_half = (dim+1) // 2
         # NOTE:
         # The zero-frequency component is shifted to position of index
         # (0-based): (ceil((n-1) / 2), ceil((m-1) / 2))
-        px       = np.arange(dim_half-dim, dim_half)
-        x, y     = np.meshgrid(px, px)
+        px = np.arange(dim_half-dim, dim_half)
+        x, y = np.meshgrid(px, px)
         rho, phi = self.cart2pol(x, y)
-        rho      = np.around(rho).astype(np.int)
-        radial_psd     = np.zeros(dim_half)
+        rho = np.around(rho).astype(np.int)
+        radial_psd = np.zeros(dim_half)
         radial_psd_err = np.zeros(dim_half)
         if verbose:
-            print("radially averaging ... ",
-                    end="", flush=True)
+            print("radially averaging ... ", end="", flush=True)
         for r in range(dim_half):
             # Get the indices of the elements satisfying rho[i,j]==r
             ii, jj = (rho == r).nonzero()
             # Calculate the mean value at a given radii
-            data              = psd2d[ii, jj]
-            radial_psd[r]     = np.nanmean(data)
+            data = psd2d[ii, jj]
+            radial_psd[r] = np.nanmean(data)
             radial_psd_err[r] = np.nanstd(data)
         # Calculate frequencies
         f = np.fft.fftfreq(dim, d=self.pixel[0])
         freqs = np.abs(f[:dim_half])
         #
-        self.freqs     = freqs
-        self.psd1d     = radial_psd
+        self.freqs = freqs
+        self.psd1d = radial_psd
         self.psd1d_err = radial_psd_err
         if verbose:
             print("DONE", end="", flush=True)
@@ -193,35 +196,34 @@ class PSD:
         mat = data.copy()
         rows, cols = mat.shape
         dim_diff = abs(rows - cols)
-        dim_max  = max(rows, cols)
         if rows > cols:
             # pad columns
             if dim_diff // 2 == 0:
-                cols_left     = np.zeros((rows, dim_diff/2))
-                cols_left[:]  = value
-                cols_right    = np.zeros((rows, dim_diff/2))
+                cols_left = np.zeros((rows, dim_diff/2))
+                cols_left[:] = value
+                cols_right = np.zeros((rows, dim_diff/2))
                 cols_right[:] = value
-                mat           = np.hstack((cols_left, mat, cols_right))
+                mat = np.hstack((cols_left, mat, cols_right))
             else:
-                cols_left     = np.zeros((rows, np.floor(dim_diff/2)))
-                cols_left[:]  = value
-                cols_right    = np.zeros((rows, np.floor(dim_diff/2)+1))
+                cols_left = np.zeros((rows, np.floor(dim_diff/2)))
+                cols_left[:] = value
+                cols_right = np.zeros((rows, np.floor(dim_diff/2)+1))
                 cols_right[:] = value
-                mat           = np.hstack((cols_left, mat, cols_right))
+                mat = np.hstack((cols_left, mat, cols_right))
         elif rows < cols:
             # pad rows
             if dim_diff // 2 == 0:
-                rows_top       = np.zeros((dim_diff/2, cols))
-                rows_top[:]    = value
-                rows_bottom    = np.zeros((dim_diff/2, cols))
+                rows_top = np.zeros((dim_diff/2, cols))
+                rows_top[:] = value
+                rows_bottom = np.zeros((dim_diff/2, cols))
                 rows_bottom[:] = value
-                mat            = np.vstack((rows_top, mat, rows_bottom))
+                mat = np.vstack((rows_top, mat, rows_bottom))
             else:
-                rows_top       = np.zeros((np.floor(dim_diff/2), cols))
-                rows_top[:]    = value
-                rows_bottom    = np.zeros((np.floor(dim_diff/2)+1, cols))
+                rows_top = np.zeros((np.floor(dim_diff/2), cols))
+                rows_top[:] = value
+                rows_bottom = np.zeros((np.floor(dim_diff/2)+1, cols))
                 rows_bottom[:] = value
-                mat            = np.vstack((rows_top, mat, rows_bottom))
+                mat = np.vstack((rows_top, mat, rows_bottom))
         return mat
 
     def plot(self, ax=None, fig=None):
@@ -237,8 +239,7 @@ class PSD:
         ymin = np.min(self.psd1d) / 3.0
         ymax = np.max(self.psd1d[mask] + self.psd1d_err[mask]) * 1.2
         #
-        eb = ax.errorbar(self.freqs, self.psd1d, yerr=self.psd1d_err,
-                         fmt="none")
+        ax.errorbar(self.freqs, self.psd1d, yerr=self.psd1d_err, fmt="none")
         ax.plot(self.freqs, self.psd1d, "ko")
         ax.set_xscale("log")
         ax.set_yscale("log")
@@ -266,7 +267,7 @@ class AstroImage:
     # background map (e.g., stowed background)
     bkgmap = None
     # exposure time of the input image
-    exposure     = None
+    exposure = None
     # exposure time of the background map
     exposure_bkg = None
 
@@ -332,18 +333,21 @@ class AstroImage:
                 if rows > rows_ref:
                     img_fixed = img[:rows_ref, :]
                 else:
-                    img_fixed = np.row_stack((img,
+                    img_fixed = np.row_stack((
+                        img,
                         np.zeros((rows_ref-rows, cols), dtype=img.dtype)))
                 # columns
                 if cols > cols_ref:
                     img_fixed = img_fixed[:, :cols_ref]
                 else:
-                    img_fixed = np.column_stack((img_fixed,
+                    img_fixed = np.column_stack((
+                        img_fixed,
                         np.zeros((rows_ref, cols_ref-cols), dtype=img.dtype)))
                 return img_fixed
             else:
-                raise ValueError("shape difference exceeds tolerance: " + \
-                        "(%d, %d) vs. (%d, %d)" % (img.shape + ref.shape))
+                raise ValueError("shape difference exceeds tolerance: " +
+                                 "(%d, %d) vs. (%d, %d)" %
+                                 (img.shape + ref.shape))
         #
         if self.bkgmap is not None:
             if verbose:
@@ -377,7 +381,7 @@ class AstroImage:
         with np.errstate(divide="ignore", invalid="ignore"):
             self.image /= self.expmap
         # set invalid values to ZERO
-        self.image[ ~ np.isfinite(self.image) ] = 0.0
+        self.image[~ np.isfinite(self.image)] = 0.0
         if verbose:
             print("DONE", flush=True)
         if cut is not None:
@@ -385,7 +389,7 @@ class AstroImage:
             if verbose:
                 print("Clipping image (%s) ... " % cut, end="", flush=True)
             threshold = cut * np.max(self.expmap)
-            self.image[ self.expmap < threshold ] = 0.0
+            self.image[self.expmap < threshold] = 0.0
             if verbose:
                 print("DONE", flush=True)
 
@@ -395,22 +399,25 @@ def main():
             description="Compute the radially averaged power spectral density",
             epilog="Version: %s (%s)" % (__version__, __date__))
     parser.add_argument("-V", "--version", action="version",
-            version="%(prog)s " + "%s (%s)" % (__version__, __date__))
+                        version="%(prog)s " +
+                                "%s (%s)" % (__version__, __date__))
     parser.add_argument("-v", "--verbose", dest="verbose",
-            action="store_true", help="show verbose information")
+                        action="store_true",
+                        help="show verbose information")
     parser.add_argument("-C", "--clobber", dest="clobber",
-            action="store_true",
-            help="overwrite the output files if already exist")
-    parser.add_argument("-i", "--infile", dest="infile",
-            required=True, help="input image")
+                        action="store_true",
+                        help="overwrite the output files if already exist")
+    parser.add_argument("-i", "--infile", dest="infile", required=True,
+                        help="input image")
     parser.add_argument("-b", "--bkgmap", dest="bkgmap", default=None,
-            help="background map (for background subtraction)")
+                        help="background map (for background subtraction)")
     parser.add_argument("-e", "--expmap", dest="expmap", default=None,
-            help="exposure map (for exposure correction)")
-    parser.add_argument("-o", "--outfile", dest="outfile",
-            required=True, help="output file to store the PSD data")
+                        help="exposure map (for exposure correction)")
+    parser.add_argument("-o", "--outfile", dest="outfile", required=True,
+                        help="output file to store the PSD data")
     parser.add_argument("-p", "--png", dest="png", default=None,
-            help="plot the PSD and save (default: same basename as outfile)")
+                        help="plot the PSD and save " +
+                             "(default: same basename as outfile)")
     args = parser.parse_args()
 
     if args.png is None:
@@ -442,7 +449,7 @@ def main():
 
     # Make and save a plot
     fig = Figure(figsize=(10, 8))
-    canvas = FigureCanvas(fig)
+    FigureCanvas(fig)
     ax = fig.add_subplot(111)
     psd.plot(ax=ax, fig=fig)
     fig.savefig(args.png, format="png", dpi=150)
