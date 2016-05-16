@@ -15,6 +15,8 @@
 #
 # Change log:
 # 2016-05-16:
+#   * Add some background subtraction support
+#   * Use `subprocess.run` instead of `subprocess.call`
 #   * PEP8 fixes
 # 2016-04-29:
 #   * Fix order of executing ds9 and print message
@@ -24,6 +26,9 @@
 #   * Add "name" and "obsid" to results
 # 2016-04-28:
 #   * Add "csb_type" to results
+#
+# TODO/XXX:
+# whether the background should be subtracted for C_SB calculation??
 #
 
 import sys
@@ -50,19 +55,45 @@ def make_csb_region(regfile, center, r1, r2):
     open(regfile, "w").write("\n".join(regions) + "\n")
 
 
-def calc_csb(evt, expmap, regfile, r1, r2):
+def calc_csb(evt, expmap, regfile, r1, r2, bkg=None):
     """
     Calculate the C_SB
+
+    If `bkg` is provided, then background subtraction is considered
+    for `dmextract` to calculate the *net* counts and surface brightness.
     """
     csbfile = os.path.splitext(regfile)[0] + ".fits"
-    cmd = "dmextract infile='%s[bin sky=@%s]' " % (evt, regfile) + \
-          "outfile=%s exp=%s opt=generic clobber=yes" % (csbfile, expmap)
-    subprocess.call("punlearn dmextract", shell=True)
-    subprocess.call(cmd, shell=True)
+    cmd_args = [
+        "dmextract",
+        "infile=%s[bin sky=@%s]" % (evt, regfile),
+        "outfile=%s" % csbfile,
+        "exp=%s" % expmap,
+        "opt=generic", "clobber=yes"
+    ]
+    if bkg is not None:
+        # consider background subtraction
+        subprocess.run(["punlearn", "dmkeypar"])
+        ret = subprocess.run(args=["dmkeypar", evt, "EXPOSURE", "echo=yes"],
+                             check=True, stdout=subprocess.PIPE)
+        exposure_evt = float(ret.stdout.decode("utf-8"))
+        ret = subprocess.run(args=["dmkeypar", bkg, "EXPOSURE", "echo=yes"],
+                             check=True, stdout=subprocess.PIPE)
+        exposure_bkg = float(ret.stdout.decode("utf-8"))
+        bkg_norm = exposure_evt / exposure_bkg
+        cmd_args += [
+            "bkg=%s[energy=700:7000][bin sky=@%s]" % (bkg, regfile),
+            "bkgnorm=%s" % bkg_norm,
+            "bkgexp=)exp"
+        ]
+    subprocess.run(["punlearn", "dmextract"])
+    subprocess.run(args=cmd_args)
     # read calculate C_SB data from output FITS
     with fits.open(csbfile) as csb_fits:
         csb_s_val = csb_fits["HISTOGRAM"].data["SUR_BRI"]
         csb_s_err = csb_fits["HISTOGRAM"].data["SUR_BRI_ERR"]
+        # if bkg is not None:
+        #     bkg_csb_s_val = csb_fits["HISTOGRAM"].data["BG_SUR_BRI"]
+        #     bkg_csb_s_err = csb_fits["HISTOGRAM"].data["BG_SUR_BRI_ERR"]
     # calculate C_SB and error
     area_ratio = (r2 / r1) ** 2
     csb = csb_s_val[0] / csb_s_val[1] / area_ratio
@@ -106,6 +137,8 @@ def main():
                              "calculate the C_SB")
     parser.add_argument("-e", "--expmap", dest="expmap", required=True,
                         help="exposure map of the input image")
+    parser.add_argument("-b", "--bkg", dest="bkg", default=None,
+                        help="background corresponding to the input evt2")
     parser.add_argument("-o", "--outfile", dest="outfile", required=True,
                         help="output json file to store the C_SB results")
     #
@@ -165,7 +198,7 @@ def main():
 
     # calculate the C_SB
     csb = calc_csb(args.infile, expmap=args.expmap,
-                   regfile=regfile, r1=r1, r2=r2)
+                   regfile=regfile, r1=r1, r2=r2, bkg=args.bkg)
     csb_data = OrderedDict([
         ("name",        name),
         ("obsid",       obsid),
