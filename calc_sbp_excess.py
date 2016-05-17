@@ -3,14 +3,16 @@
 #
 # Aaron LI
 # Created: 2016-04-26
-# Updated: 2016-05-06
+# Updated: 2016-05-17
 #
-# Changelog:
+# Change log:
+# 2016-05-17:
+#   * Add argument "--subtract-bkg" and consider background subtraction
+#   * Add argument "--r500-cut" and `rcut` support
 # 2016-05-06:
 #   * Add function `estimate_excess_error()` to estimate uncertainty
 #   * update according to `sbp_fit` renamed to `fit_sbp`
 #   * PEP8 fixes
-#
 #
 
 """
@@ -33,11 +35,12 @@ from configobj import ConfigObj
 
 from fit_sbp import make_model, make_sbpfit
 
-__version__ = "0.2.0"
-__date__ = "2016-05-06"
+__version__ = "0.3.1"
+__date__ = "2016-05-17"
 
 
-def calc_excess(data, fitted_model):
+def calc_excess(data, fitted_model, rcut=None,
+                subtract_bkg=False, verbose=False):
     """
     Calculate the central brightness excess value and ratio with respect
     to the fitted SBP model (single-beta).
@@ -48,6 +51,10 @@ def calc_excess(data, fitted_model):
     Arguments:
       * data: raw 4-column SBP data
       * fitted_model: fitted SBP model
+      * rcut: cut radius for total/integrated brightness calculation;
+              if rcut larger than the maximum available radius, then
+              use the maximum radius instead.
+      * subtract_bkg: whether subtract the fitted background?
     """
     radii = data[:, 0]
     radii_err = data[:, 1]
@@ -55,6 +62,25 @@ def calc_excess(data, fitted_model):
     brightness_model = fitted_model.f(radii)
     rin = radii - radii_err
     rout = radii + radii_err
+    if rcut is not None and rcut < rout[-1]:
+        ncut = np.sum(rin <= rcut)
+        rin = rin[:ncut]
+        rout = rout[:ncut]
+        rout[-1] = rcut
+        brightness = brightness[:ncut]
+        brightness_model = brightness_model[:ncut]
+        if verbose:
+            print("DEBUG: rcut:", rcut, file=sys.stderr)
+            print("DEBUG: ncut:", ncut, file=sys.stderr)
+            print("DEBUG: rin:", rin, file=sys.stderr)
+            print("DEBUG: rout:", rout, file=sys.stderr)
+            print("DEBUG: brightness:", brightness, file=sys.stderr)
+    if subtract_bkg:
+        bkg = fitted_model.get_param("bkg").value
+        if verbose:
+            print("Subtract fitted background: %g" % bkg)
+        brightness -= bkg
+        brightness_model -= bkg
     areas = np.pi * (rout**2 - rin**2)
     bsum_obs = np.sum(brightness * areas)
     bsum_model = np.sum(brightness_model * areas)
@@ -69,7 +95,8 @@ def calc_excess(data, fitted_model):
     return excess
 
 
-def estimate_excess_error(data, sbpfit, mctimes, verbose=False):
+def estimate_excess_error(data, sbpfit, mctimes, rcut=None,
+                          subtract_bkg=False, verbose=False):
     """
     Estimate the uncertainty of central excess value by Monte Carlo method.
 
@@ -102,7 +129,9 @@ def estimate_excess_error(data, sbpfit, mctimes, verbose=False):
         sbpfit.load_params(params)
         sbpfit.fit()
         model_rand = sbpfit.get_model()
-        excess = calc_excess(data=sbpdata_rand, fitted_model=model_rand)
+        excess = calc_excess(data=sbpdata_rand, fitted_model=model_rand,
+                             rcut=rcut, subtract_bkg=subtract_bkg,
+                             verbose=False)
         ev_results.append(excess["excess_value"])
         er_results.append(excess["excess_ratio"])
     if verbose:
@@ -146,6 +175,15 @@ def main():
                         type=int, default=default_mctimes,
                         help="number of MC times to estimate excess error " +
                              "(default: %d)" % default_mctimes)
+    parser.add_argument("-R", "--r500-cut", dest="r500_cut",
+                        type=float, default=0.5,
+                        help="fraction of R500 to be taken as the cut " +
+                             "radius for total brightness calculation " +
+                             "(default: 0.5)")
+    parser.add_argument("-B", "--subtract-bkg", dest="subtract_bkg",
+                        action="store_true",
+                        help="subtract the fitted background and calculate " +
+                             "the net brightness")
     parser.add_argument("config", help="Config file for SBP fitting")
     parser.add_argument("outfile", nargs="?", default=default_outfile,
                         help="Output json file to save the results " +
@@ -153,6 +191,10 @@ def main():
     args = parser.parse_args()
 
     config = ConfigObj(args.config)
+
+    r500_pix = float(config["r500_pix"])
+    rcut = args.r500_cut * r500_pix
+
     modelname = config["model"]
     config_model = config[modelname]
 
@@ -171,15 +213,19 @@ def main():
     sbpfit = make_sbpfit(config, model=model)
 
     sbpdata = np.loadtxt(config["sbpfile"])
-    excess = calc_excess(data=sbpdata, fitted_model=model)
+    excess = calc_excess(data=sbpdata, fitted_model=model, rcut=rcut,
+                         subtract_bkg=args.subtract_bkg,
+                         verbose=args.verbose)
     excess_err = estimate_excess_error(data=sbpdata, sbpfit=sbpfit,
-                                       mctimes=args.mctimes,
+                                       mctimes=args.mctimes, rcut=rcut,
+                                       subtract_bkg=args.subtract_bkg,
                                        verbose=args.verbose)
 
     excess_data = OrderedDict([
         ("name",                config["name"]),
         ("obsid",               int(config["obsid"])),
         ("model",               modelname),
+        ("excess_rcut",         rcut),
         ("brightness_obs",      excess["brightness_obs"]),
         ("brightness_model",    excess["brightness_model"]),
         ("excess_value",        excess["excess_value"]),
