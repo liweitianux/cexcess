@@ -6,6 +6,7 @@
 #
 # Change log:
 # 2016-05-18:
+#   * Roughly implement the PEI uncertainty estimation
 #   * Fix/Update PEI Y positions determination
 #   * Update `calc_pei()` results
 # 2016-05-04:
@@ -44,7 +45,7 @@ import matplotlib.patches as patches
 
 from info import get_r500
 
-__version__ = "0.4.2"
+__version__ = "0.5.0"
 __date__ = "2016-05-18"
 
 plt.style.use("ggplot")
@@ -125,15 +126,12 @@ def calc_pei(data, r500, interp_np=101, pei_pos=None):
     return (results, data_interp_log10)
 
 
-def estimate_pei_error(data, r500, mctimes, verbose=False):
+def estimate_pei_error(data, r500, pei_pos, mctimes=5000, verbose=False):
     """
     Estimate the PEI error by Monte Carlo method.
 
     FIXME:
-    CANNOT randomize the PSD data and just invoke the `calc_pei()` to
-    calculate the PEI value, which may be vastly different to the original
-    *central* value, due to the possible significant change to the PEI
-    rectangle and PSD data points (large PSD errors).
+      * consider the R500 uncertainty
     """
     eps = 1.0e-30
     freqs = data[:, 0]
@@ -149,19 +147,24 @@ def estimate_pei_error(data, r500, mctimes, verbose=False):
         if verbose and i % 100 == 0:
             print("%d..." % i, end="", flush=True)
         psd1d_rand = np.random.normal(psd1d, psd1d_err)
-        r500_rand = np.random.normal(r500, r500_err)
-        pei = calc_pei(data=(freqs, psd1d_rand), r500=r500_rand)
+        # Fix the values that are negative or too small
+        psd1d_rand[psd1d_rand < eps] = eps
+        # FIXME/XXX: how to consider the R500 uncertainty?
+        # r500_rand = np.random.normal(r500, r500_err)
+        pei, data_interp_log10 = calc_pei(data=(freqs, psd1d_rand),
+                                          r500=r500, pei_pos=pei_pos)
         pei_results.append(pei["pei_value"])
+    if verbose:
+        print("DONE!", flush=True)
     pei_mean = np.mean(pei_results)
-    pei_err = np.std(pei_results)
-    pei_q25, pei_median, pei_q75 = np.percentile(pei_results,
-                                                 q=(25, 50, 75))
+    pei_std = np.std(pei_results)
+    pei_q25, pei_median, pei_q75 = np.percentile(pei_results, q=(25, 50, 75))
     results = {
-        "pei_mean": pei_mean,
+        "pei_mean":   pei_mean,
+        "pei_std":    pei_std,
         "pei_median": pei_median,
-        "pei_q25": pei_q25,
-        "pei_q75": pei_q75,
-        "pei_err": pei_err,
+        "pei_q25":    pei_q25,
+        "pei_q75":    pei_q75,
     }
     return results
 
@@ -237,7 +240,7 @@ def main():
     default_infile = "psd.txt"
     default_outfile = "pei.json"
     default_infojson = "../*_INFO.json"
-    # default_mctimes = 1000
+    default_mctimes = 5000
 
     parser = argparse.ArgumentParser(
             description="Calculate the power excess index (PEI)",
@@ -245,13 +248,13 @@ def main():
     parser.add_argument("-V", "--version", action="version",
                         version="%(prog)s " + "%s (%s)" % (__version__,
                                                            __date__))
-    # parser.add_argument("-v", "--verbose", dest="verbose",
-    #                     required=False, action="store_true",
-    #                     help="show verbose information")
-    # parser.add_argument("-m", "--mctimes", dest="mctimes", required=False,
-    #                     type=int, default=default_mctimes,
-    #                     help="number of MC times to estimate PEI error " +
-    #                          "(default: %d)" % default_mctimes)
+    parser.add_argument("-v", "--verbose", dest="verbose",
+                        required=False, action="store_true",
+                        help="show verbose information")
+    parser.add_argument("-m", "--mctimes", dest="mctimes", required=False,
+                        type=int, default=default_mctimes,
+                        help="number of MC times to estimate PEI error " +
+                             "(default: %d)" % default_mctimes)
     parser.add_argument("-j", "--json", dest="json", required=False,
                         help="the *_INFO.json file " +
                              "(default: find %s)" % default_infojson)
@@ -287,8 +290,9 @@ def main():
     freqs = psd_data[:, 0]
     psd1d = psd_data[:, 1]
     pei, data_interp_log10 = calc_pei(data=(freqs, psd1d), r500=r500_pix)
-    # pei_err = estimate_pei_error(psd_data, r500=(r500_pix, r500_err_pix),
-    #                              mctimes=args.mctimes, verbose=args.verbose)
+    pei_err = estimate_pei_error(psd_data, r500=(r500_pix, r500_err_pix),
+                                 pei_pos=pei, mctimes=args.mctimes,
+                                 verbose=args.verbose)
 
     pei_data = OrderedDict([
         ("name",            name),
@@ -302,11 +306,12 @@ def main():
         ("area_total",      pei["area_total"]),
         ("area_below",      pei["area_below"]),
         ("pei",             pei["pei_value"]),
-        # ("pei_mean",        pei_err["pei_mean"]),
-        # ("pei_median",      pei_err["pei_median"]),
-        # ("pei_q25",         pei_err["pei_q25"]),
-        # ("pei_q75",         pei_err["pei_q75"]),
-        # ("pei_err",         pei_err),
+        ("pei_mean",        pei_err["pei_mean"]),
+        ("pei_std",         pei_err["pei_std"]),
+        ("pei_median",      pei_err["pei_median"]),
+        ("pei_q25",         pei_err["pei_q25"]),
+        ("pei_q75",         pei_err["pei_q75"]),
+        ("mctimes",         args.mctimes),
     ])
     pei_data_json = json.dumps(pei_data, indent=2)
     print(pei_data_json)
