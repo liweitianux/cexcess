@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 # Read results in JSON format and output as CSV format.
 #
@@ -17,7 +16,7 @@ from collections import OrderedDict
 
 def main():
     parser = argparse.ArgumentParser(
-            description="Extract excess results from excess.json")
+            description="Read JSON results and output as CSV format")
     parser.add_argument("json", help="input JSON file")
     parser.add_argument("csv", nargs="?", help="optional output CSV file")
     args = parser.parse_args()
