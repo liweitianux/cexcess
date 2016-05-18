@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 # Aaron LI
 # Created: 2016-04-29
-# Updated: 2016-05-04
+# Updated: 2016-05-18
+#
+# Change log:
+# 2016-05-18:
+#   * Fix/Update PEI Y positions determination
+#   * Update `calc_pei()` results
+# 2016-05-04:
+#   * Prepare the PEI uncertainty estimation support
 #
 # FIXME/TODO:
-#   * come up a approach to estimate the PEI error
+#   * improve the PEI uncertainty estimation approach (fix the bias)
 #
 
 """
@@ -38,13 +44,13 @@ import matplotlib.patches as patches
 
 from info import get_r500
 
-__version__ = "0.4.0"
-__date__ = "2016-05-04"
+__version__ = "0.4.2"
+__date__ = "2016-05-18"
 
 plt.style.use("ggplot")
 
 
-def calc_pei(data, r500, interp_np=101):
+def calc_pei(data, r500, interp_np=101, pei_pos=None):
     """
     Calculate the power excess index (PEI), which is defined the area ratio
     of the lower-left part with respect to the total rectangle.
@@ -53,29 +59,64 @@ def calc_pei(data, r500, interp_np=101):
       * data: (frequency, power) power spectrum data
       * r500: R500 value in unit of the inverse of the above "frequency"
       * interp_np: number of data points interpolated to calculate PEI
+      * pei_pos: position specification (i.e., xmin, xmax, ymin, ymax) of
+                 the PEI rectangle.
+                 If this argument is provided, then the PEI rectangle is
+                 just determined (i.e., r500 etc is ignored).
+                 This is a dictionary with the mentioned keys.
+                 e.g., the returned results of previous `calc_pei()`.
     """
     freqs, psd1d = data
-    # frequency values corresponding to 0.35R500 and 0.035R500
-    pei_fmin = 1.0 / (0.350 * r500)
-    pei_fmax = 1.0 / (0.035 * r500)
     # switch to the logarithmic scale
     mask = (freqs > 0.0)
     x = np.log10(freqs[mask])
     y = np.log10(psd1d[mask])
-    pei_xmin = np.log10(pei_fmin)
-    pei_xmax = np.log10(pei_fmax)
+    # determine the X positions of PEI rectangle
+    if pei_pos is not None:
+        pei_xmin = pei_pos["pei_xmin"]
+        pei_xmax = pei_pos["pei_xmax"]
+    else:
+        # frequency values corresponding to 0.35R500 and 0.035R500
+        pei_fmin = 1.0 / (0.350 * r500)
+        pei_fmax = 1.0 / (0.035 * r500)
+        pei_xmin = np.log10(pei_fmin)
+        pei_xmax = np.log10(pei_fmax)
+    # data points within the PEI range
+    mask_pei = np.logical_and(x >= pei_xmin, x <= pei_xmax)
+    y_pei = y[mask_pei]
     # interpolate the power spectrum
     f_interp = scipy.interpolate.interp1d(x, y, kind="linear",
                                           assume_sorted=True)
     x_interp = np.linspace(pei_xmin, pei_xmax, num=interp_np)
     y_interp = f_interp(x_interp)
-    pei_ymin = np.min(y_interp)
-    pei_ymax = np.max(y_interp)
+    # determine the Y positions of PEI rectangle
+    if pei_pos is not None:
+        pei_ymin = pei_pos["pei_ymin"]
+        pei_ymax = pei_pos["pei_ymax"]
+    else:
+        pei_ymin = min(np.min(y_interp), np.min(y_pei))
+        pei_ymax = max(np.max(y_interp), np.max(y_pei))
+    #
+    # XXX/FIXME:
+    #  fixes the values that are smaller than the predefined `pei_ymin`
+    #  (due to large uncertainties of the PSD)
+    # NOTE/FIXME:
+    #   Since the PEI rectangle is just *fixed* during the Monte Carlo error
+    #   estimation, and the values below the specified `pei_ymin` are just
+    #   ignored (i.e., force to be `pei_ymin`), therefore, the estimated error
+    #   of PEI is upwardly *biased*, i.e., the upper PEI uncertainty maybe
+    #   OK, but the lower PEI uncertainty is *underestimated*.
+    #
+    y_interp[y_interp < pei_ymin] = pei_ymin
     # calculate the PEI
     area_total = (pei_xmax - pei_xmin) * (pei_ymax - pei_ymin)
     area_below = scipy.integrate.trapz((y_interp-pei_ymin), x_interp)
     pei_value = area_below / area_total
     results = {
+        "pei_xmin":   pei_xmin,
+        "pei_xmax":   pei_xmax,
+        "pei_ymin":   pei_ymin,
+        "pei_ymax":   pei_ymax,
         "area_total": area_total,
         "area_below": area_below,
         "pei_value":  pei_value,
@@ -137,10 +178,10 @@ def plot_pei(data, data_interp_log10, info={}, ax=None, fig=None):
     psd1d_err = data[:, 2]
     x_interp = 10 ** data_interp_log10[:, 0]
     y_interp = 10 ** data_interp_log10[:, 1]
-    pei_xmin = np.min(x_interp)
-    pei_xmax = np.max(x_interp)
-    pei_ymin = np.min(y_interp)
-    pei_ymax = np.max(y_interp)
+    pei_xmin = 10 ** info["pei_xmin"]
+    pei_xmax = 10 ** info["pei_xmax"]
+    pei_ymin = 10 ** info["pei_ymin"]
+    pei_ymax = 10 ** info["pei_ymax"]
     #
     mask = (freqs > 0.0)
     xmin = np.min(freqs[mask]) / 1.2
@@ -254,6 +295,10 @@ def main():
         ("obsid",           obsid),
         ("r500_pix",        r500_pix),
         ("r500_err_pix",    r500_err_pix),
+        ("pei_xmin",        pei["pei_xmin"]),
+        ("pei_xmax",        pei["pei_xmax"]),
+        ("pei_ymin",        pei["pei_ymin"]),
+        ("pei_ymax",        pei["pei_ymax"]),
         ("area_total",      pei["area_total"]),
         ("area_below",      pei["area_below"]),
         ("pei",             pei["pei_value"]),
