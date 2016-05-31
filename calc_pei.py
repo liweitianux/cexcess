@@ -311,7 +311,7 @@ def main():
         ("pei_median",      pei_err["pei_median"]),
         ("pei_q25",         pei_err["pei_q25"]),
         ("pei_q75",         pei_err["pei_q75"]),
-        ("mctimes",         args.mctimes),
+        ("mc_times",        args.mctimes),
     ])
     pei_data_json = json.dumps(pei_data, indent=2)
     print(pei_data_json)

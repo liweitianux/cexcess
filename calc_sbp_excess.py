@@ -3,9 +3,11 @@
 #
 # Aaron LI
 # Created: 2016-04-26
-# Updated: 2016-05-17
+# Updated: 2016-05-18
 #
 # Change log:
+# 2016-05-18:
+#   * Update output results
 # 2016-05-17:
 #   * Add argument "--subtract-bkg" and consider background subtraction
 #   * Add argument "--r500-cut" and `rcut` support
@@ -35,8 +37,8 @@ from configobj import ConfigObj
 
 from fit_sbp import make_model, make_sbpfit
 
-__version__ = "0.3.1"
-__date__ = "2016-05-17"
+__version__ = "0.3.2"
+__date__ = "2016-05-18"
 
 
 def calc_excess(data, fitted_model, rcut=None,
@@ -74,7 +76,8 @@ def calc_excess(data, fitted_model, rcut=None,
             print("DEBUG: ncut:", ncut, file=sys.stderr)
             print("DEBUG: rin:", rin, file=sys.stderr)
             print("DEBUG: rout:", rout, file=sys.stderr)
-            print("DEBUG: brightness:", brightness, file=sys.stderr)
+    else:
+        rcut = rout[-1]
     if subtract_bkg:
         bkg = fitted_model.get_param("bkg").value
         if verbose:
@@ -87,6 +90,8 @@ def calc_excess(data, fitted_model, rcut=None,
     excess_value = bsum_obs - bsum_model
     excess_ratio = excess_value / bsum_obs
     excess = {
+        "excess_rcut":      rcut,
+        "subtract_bkg":     subtract_bkg,
         "brightness_obs":   bsum_obs,
         "brightness_model": bsum_model,
         "excess_value":     excess_value,
@@ -225,7 +230,8 @@ def main():
         ("name",                config["name"]),
         ("obsid",               int(config["obsid"])),
         ("model",               modelname),
-        ("excess_rcut",         rcut),
+        ("excess_rcut",         excess["excess_rcut"]),
+        ("subtract_bkg",        excess["subtract_bkg"]),
         ("brightness_obs",      excess["brightness_obs"]),
         ("brightness_model",    excess["brightness_model"]),
         ("excess_value",        excess["excess_value"]),

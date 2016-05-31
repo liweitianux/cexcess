@@ -164,7 +164,7 @@ class PSD:
         self.psd1d = radial_psd
         self.psd1d_err = radial_psd_err
         if verbose:
-            print("DONE", end="", flush=True)
+            print("DONE", flush=True)
         return (freqs, radial_psd, radial_psd_err)
 
     @staticmethod
