@@ -3,10 +3,34 @@
 # Extract surface brightness profile, with optional background
 # subtraction and region exclusion.
 #
+# The input file can be the following 2 cases:
+# (1) (RECOMMENDED) binned image file:
+#     e.g., the binned 0.7-7.0 keV image with its dimensions determined
+#     by the `skyfov.fits` file.
+#     Use this type of input file is recommended, as the required exposure
+#     map is also an image and thus has identical dimensions with the input
+#     image, therefore, the extraction region area can be accurately
+#     calculated with both the excluded point sources and the regions
+#     beyond the CCD edges accounted.  And the final extracted surface
+#     brightness results (`SUR_FLUX`) will not be biased due to the regions
+#     lying beyond the CCD edges.
+# (2) events file (evt2):
+#     e.g., the cleaned evt2 file
+#     If the extraction region is beyond the CCD edges, the source extraction
+#     region will be *bigger* than the region for `MEAN_SRC_EXP` calculation,
+#     because the exposure image has specific boundaries while the events file
+#     dose not.  In consequence, the final `SUR_FLUX` will be under-estimated.
+#     As a workaround, the original extraction regions need additional
+#     process that intersect with the CCD boundaries (extracted from the
+#     `skyfov.fits`).
+#
 # Aaron LI
 # Created: 2016-05-17
+# Updated: 2016-06-06
 #
 # Change log:
+# 2016-06-06:
+#   * Add explanations on image/evt2 input file
 #
 
 import os
@@ -161,16 +185,17 @@ def main():
                         default=None,
                         help="file containing regions to be excluded")
     parser.add_argument("-i", "--infile", dest="infile", required=True,
-                        help="input EVT2/image file")
+                        help="input binned image (RECOMMENDED) or EVT2 file")
     parser.add_argument("-e", "--expmap", dest="expmap", required=True,
                         help="exposure map of the input file")
     parser.add_argument("-b", "--bkg", dest="bkg", default=None,
                         help="background event/image of the input file")
     parser.add_argument("-E", "--erange", dest="erange", default=None,
-                        help="energy range of interest (event files only)")
+                        help="energy range of interest (for input evt2 file)")
     parser.add_argument("-F", "--fov", dest="fov", default=None,
                         help="FoV FITS file (for applying FoV constraint " +
-                             "to the SBP regions)")
+                             "to the SBP regions; recommended if use " +
+                             "evt2 file as the input file)")
     parser.add_argument("-o", "--outprefix", dest="outprefix",
                         required=False,
                         help="prefix of output files (default: same " +
