@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 # Calculate the surface brightness concentration (i.e., C_{SB}), which
 # is an index/indicator of the cool core, and may be defined as:
@@ -11,9 +10,11 @@
 #
 # Aaron LI
 # Created: 2016-04-28
-# Updated: 2016-05-16
+# Updated: 2016-06-07
 #
 # Change log:
+# 2016-06-07:
+#   * Update function `calc_csb()`
 # 2016-05-16:
 #   * Add some background subtraction support
 #   * Use `subprocess.run` instead of `subprocess.call`
@@ -55,7 +56,7 @@ def make_csb_region(regfile, center, r1, r2):
     open(regfile, "w").write("\n".join(regions) + "\n")
 
 
-def calc_csb(evt, expmap, regfile, r1, r2, bkg=None):
+def calc_csb(infile, expmap, regfile, r1, r2, bkg=None):
     """
     Calculate the C_SB
 
@@ -65,7 +66,7 @@ def calc_csb(evt, expmap, regfile, r1, r2, bkg=None):
     csbfile = os.path.splitext(regfile)[0] + ".fits"
     cmd_args = [
         "dmextract",
-        "infile=%s[bin sky=@%s]" % (evt, regfile),
+        "infile=%s[bin sky=@%s]" % (infile, regfile),
         "outfile=%s" % csbfile,
         "exp=%s" % expmap,
         "opt=generic", "clobber=yes"
@@ -73,7 +74,7 @@ def calc_csb(evt, expmap, regfile, r1, r2, bkg=None):
     if bkg is not None:
         # consider background subtraction
         subprocess.run(["punlearn", "dmkeypar"])
-        ret = subprocess.run(args=["dmkeypar", evt, "EXPOSURE", "echo=yes"],
+        ret = subprocess.run(args=["dmkeypar", infile, "EXPOSURE", "echo=yes"],
                              check=True, stdout=subprocess.PIPE)
         exposure_evt = float(ret.stdout.decode("utf-8"))
         ret = subprocess.run(args=["dmkeypar", bkg, "EXPOSURE", "echo=yes"],
@@ -81,7 +82,7 @@ def calc_csb(evt, expmap, regfile, r1, r2, bkg=None):
         exposure_bkg = float(ret.stdout.decode("utf-8"))
         bkg_norm = exposure_evt / exposure_bkg
         cmd_args += [
-            "bkg=%s[energy=700:7000][bin sky=@%s]" % (bkg, regfile),
+            "bkg=%s[bin sky=@%s]" % (bkg, regfile),
             "bkgnorm=%s" % bkg_norm,
             "bkgexp=)exp"
         ]
@@ -133,12 +134,11 @@ def main():
                         help="region from which to extract the center " +
                              "coordinate (default: sbprofile.reg)")
     parser.add_argument("-i", "--infile", dest="infile", required=True,
-                        help="input energy-filtered EVT2 used to " +
-                             "calculate the C_SB")
+                        help="binned image used to calculate the C_SB")
     parser.add_argument("-e", "--expmap", dest="expmap", required=True,
                         help="exposure map of the input image")
     parser.add_argument("-b", "--bkg", dest="bkg", default=None,
-                        help="background corresponding to the input evt2")
+                        help="background image with respect to the input file")
     parser.add_argument("-o", "--outfile", dest="outfile", required=True,
                         help="output json file to store the C_SB results")
     #
