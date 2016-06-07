@@ -14,6 +14,7 @@
 #     beyond the CCD edges accounted.  And the final extracted surface
 #     brightness results (`SUR_FLUX`) will not be biased due to the regions
 #     lying beyond the CCD edges.
+#     In addition, using image as the input is also much faster.
 # (2) events file (evt2):
 #     e.g., the cleaned evt2 file
 #     If the extraction region is beyond the CCD edges, the source extraction
@@ -26,9 +27,11 @@
 #
 # Aaron LI
 # Created: 2016-05-17
-# Updated: 2016-06-06
+# Updated: 2016-06-07
 #
 # Change log:
+# 2016-06-07:
+#   * Remove unused argument `--json`
 # 2016-06-06:
 #   * Add explanations on image/evt2 input file
 #
@@ -174,9 +177,6 @@ def extract_sbp(infile, expmap, regfile, outprefix, bkg=None, erange=None):
 def main():
     parser = argparse.ArgumentParser(
             description="Extract surface brightness profile")
-    parser.add_argument("-j", "--json", dest="json", required=False,
-                        help="the *_INFO.json file " +
-                             "(default: find ../*_INFO.json)")
     parser.add_argument("-r", "--region", dest="region",
                         required=False, default="sbprofile.reg",
                         help="surface brightness profile region file " +
