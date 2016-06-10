@@ -42,7 +42,7 @@ def parse_erange(erange):
 def calc_exp(expmap, regfile):
     """
     Calculate the area of the background spectrum extraction region,
-    and the mean exposure (used as the MEAN_SRC_EXPOSURE) of that region.
+    and the mean exposure (un-normalized w.r.t exposure time) of that region.
     """
     tf = tempfile.NamedTemporaryFile()
     cmd_args = [
@@ -96,9 +96,9 @@ def main():
     parser = argparse.ArgumentParser(
             description="Calculate the background surface brightness")
     parser.add_argument("-b", "--orig-bkg", dest="orig_bkg", required=True,
-                        help="original/uncorrected background spectrum " +
-                        "(e.g., blanksky_lbkg.pi), from which to get the " +
-                        "original EXPOSURE and BACKSCAL, etc.")
+                        help="original/uncorrected local background " +
+                        "spectrum (e.g., lbkg.pi), from which to get the " +
+                        "original/source EXPOSURE and BACKSCAL, etc.")
     parser.add_argument("-B", "--corr-bkg", dest="corr_bkg", required=True,
                         help="corrected background spectrum for the " +
                         "Galactic and cosmic background radiations " +
@@ -121,27 +121,31 @@ def main():
     corr_bkg_results = calc_spec_counts(args.corr_bkg, erange=(e_low, e_high))
     exp_results = calc_exp(args.expmap, regfile=args.bkg_region)
 
-    counts = corr_bkg_results["counts"]
-    exposure = corr_bkg_results["exposure"]
-    backscal = corr_bkg_results["backscal"]
+    corr_counts = corr_bkg_results["counts"]
+    corr_exposure = corr_bkg_results["exposure"]
+    corr_backscal = corr_bkg_results["backscal"]
+    orig_exposure = orig_bkg_results["exposure"]
     orig_backscal = orig_bkg_results["backscal"]
+    area = exp_results["area"]
     mean_exp = exp_results["mean_exp"]
-    bkg_sb = counts / exposure / mean_exp / backscal * orig_backscal
+    bkg_sb = corr_counts / corr_exposure / (mean_exp / orig_exposure) \
+             / (area * corr_backscal / orig_backscal)
 
     results = OrderedDict([
-        ("energy_low", e_low),
-        ("energy_high", e_high),
-        ("channel_low", corr_bkg_results["channel_low"]),
-        ("channel_high", corr_bkg_results["channel_high"]),
-        ("counts", counts),
-        ("exposure", exposure),
-        ("backscal", backscal),
-        ("total_exp", exp_results["total_exp"]),
+        ("energy_low",    e_low),
+        ("energy_high",   e_high),
+        ("channel_low",   corr_bkg_results["channel_low"]),
+        ("channel_high",  corr_bkg_results["channel_high"]),
+        ("counts",        corr_counts),
+        ("exposure",      orig_exposure),
+        ("exposure_bkg",  corr_exposure),
+        ("backscal",      corr_backscal),
+        ("total_exp",     exp_results["total_exp"]),
         ("total_exp_err", exp_results["total_exp_err"]),
-        ("area", exp_results["area"]),
-        ("mean_exp", exp_results["mean_exp"]),
-        ("mean_exp_err", exp_results["mean_exp_err"]),
-        ("bkg_sb", bkg_sb),
+        ("area",          exp_results["area"]),
+        ("mean_exp",      exp_results["mean_exp"]),
+        ("mean_exp_err",  exp_results["mean_exp_err"]),
+        ("bkg_sb",        bkg_sb),
     ])
     results_json = json.dumps(results, indent=2)
     print(results_json)
