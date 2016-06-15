@@ -15,9 +15,14 @@
 #
 # Weitian LI
 # Created: 2016-06-10
-# Updated: 2016-06-13
+# Updated: 2016-06-15
 #
 # Change logs:
+# 2016-06-15:
+#   * Add class 'SBP' for SBP background subtraction and extrapolation
+# 2016-06-14:
+#   * Add class 'PLCModel' based on 'FitModel'
+#   * Split class 'FitModel' from 'ABModel'
 # 2016-06-13:
 #   * Add class 'ABModel' to support data scaling
 #   * Implement primitive SBP deprojection approach for class 'DeprojectSBP'
@@ -167,23 +172,12 @@ def testProjection():
     print("All tests PASSED!")
 
 
-class ABModel:
+class FitModel:
     """
-    AB model is a modified version of the beta model, which can roughly
-    fit both centrally peaked and cored models, e.g., central excess emission.
-
-    References:
-    [1] Pratt & Arnaud, 2002, A&A, 394, 375; eq.(2)
-    [2] ref.[1], eq.(10)
+    Base/Meta class for model fitting, with data and parameters scaling.
     """
-    name = "AB model"
-    # model parameters
+    name = ""
     params = lmfit.Parameters()
-    params.add_many(  # (name, value, vary, min, max, expr)
-                    ("A",     1.0e-9, True, 0.0, 1.0e-5, None),
-                    ("alpha", 0.7,    True, 0.1, 1.1,    None),
-                    ("rc",    30.0,   True, 1.0, 1.0e4,  None),
-                    ("beta",  0.7,    True, 0.3, 1.1,    None))
     # optimization method
     fit_method = "lbfgsb"
     # whether the 'ydata' and 'yerr' to be scaled in order to reduce
@@ -197,9 +191,15 @@ class ABModel:
             self.load_params(params)
         self.scale = scale
 
+    @staticmethod
+    def model(x, params):
+        pass
+
+    def f(self, x):
+        return self.model(x, self.params) * self.scale_factor
+
     def load_data(self, xdata, ydata=None, xerr=None, yerr=None,
                   update_params=False):
-        self.reset()
         if xdata.ndim == 2 and xdata.shape[1] == 4:
             # 4-column data
             self.xdata = xdata[:, 0].copy()
@@ -214,6 +214,10 @@ class ABModel:
         self.scale_data(update_params=update_params)
 
     def scale_data(self, update_params=False):
+        """
+        Scale the ydata and yerr to reduce their dynamical ranges,
+        for a more stable model fitting.
+        """
         if self.scale:
             y_min = np.min(self.ydata)
             y_max = np.max(self.ydata)
@@ -221,14 +225,13 @@ class ABModel:
             self.ydata /= self.scale_factor
             self.yerr /= self.scale_factor
             if update_params:
-                A_min = 1.0
-                A_max = np.max(self.ydata)
-                self.set_param("A", value=(A_min+A_max)*0.5,
-                               min=A_min, max=A_max)
+                self.scale_params()
 
-    def reset(self):
-        self.fitter = None
-        self.fitted = None
+    def scale_params(self):
+        """
+        Scale the paramters' min/max values accordingly.
+        """
+        pass
 
     def f_residual(self, params):
         if self.yerr is None:
@@ -242,19 +245,6 @@ class ABModel:
         self.fitter = lmfit.Minimizer(self.f_residual, self.params)
         self.fitted = self.fitter.minimize(method=method)
         self.load_params(self.fitted.params)
-
-    @staticmethod
-    def model(x, params):
-        parvals = params.valuesdict()
-        A = parvals["A"]
-        alpha = parvals["alpha"]
-        rc = parvals["rc"]
-        beta = parvals["beta"]
-        return (A * np.power(x/rc, -alpha) *
-                np.power((1 + (x/rc)**2), -1.5*beta + 0.5*alpha))
-
-    def f(self, x):
-        return self.model(x, self.params) * self.scale_factor
 
     def get_param(self, name=None):
         """
@@ -295,10 +285,95 @@ class ABModel:
             self.params = p
 
 
+class ABModel(FitModel):
+    """
+    AB model is a modified version of the beta model, which can roughly
+    fit both centrally peaked and cored models, e.g., central excess emission.
+
+    References:
+    [1] Pratt & Arnaud, 2002, A&A, 394, 375; eq.(2)
+    [2] ref.[1], eq.(10)
+    """
+    name = "AB model"
+    # model parameters
+    params = lmfit.Parameters()
+    params.add_many(  # (name, value, vary, min, max, expr)
+                    ("A",     1.0e-9, True, 0.0, 1.0e-5, None),
+                    ("alpha", 0.7,    True, 0.1, 1.1,    None),
+                    ("rc",    30.0,   True, 1.0, 1.0e4,  None),
+                    ("beta",  0.7,    True, 0.3, 1.1,    None))
+
+    def scale_params(self):
+        A_min = 1.0
+        A_max = np.max(self.ydata)
+        self.set_param("A", value=(A_min+A_max)*0.5,
+                       min=A_min, max=A_max)
+
+    @staticmethod
+    def model(x, params):
+        parvals = params.valuesdict()
+        A = parvals["A"]
+        alpha = parvals["alpha"]
+        rc = parvals["rc"]
+        beta = parvals["beta"]
+        return (A * np.power(x/rc, -alpha) *
+                np.power((1 + (x/rc)**2), -1.5*beta + 0.5*alpha))
+
+
+class PLCModel(FitModel):
+    """
+    PLC model consists of a powerlaw and an constant, that is used
+    to fit/approximate the outer SBP.
+    Therefore, the fitted constant is used to subtract the uniform
+    background from the SBP, and the fitted powerlaw index is used
+    to extrapolate the SBP in order to mitigate the deprojection
+    errors due to FoV limit.
+
+    NOTE:
+    I think the uniform background (i.e., by fitting the whole or
+    core-excluded SBP) should be subtracted from the SBP first, then
+    adopt this PLCModel to fit the outer part of SBP, with the 'bkg'
+    parameter fixed at zero.
+    """
+    name = "PLC model"
+    # model parameters
+    params = lmfit.Parameters()
+    params.add_many(  # (name, value, vary, min, max, expr)
+                    ("A",     1.0e-9, True,  0.0, 1.0e-5, None),
+                    ("rmin",  30.0,   False, 1.0, 1.0e4,  None),
+                    ("alpha", 1.6,    True,  0.4, 2.8,    None),
+                    ("bkg",   0.0,    False, 0.0, 1.0e-5, None))
+
+    def load_data(self, xdata, ydata=None, xerr=None, yerr=None,
+                  update_params=False):
+        super().load_data(xdata=xdata, ydata=ydata, xerr=xerr, yerr=yerr,
+                          update_params=update_params)
+        self.set_param("rmin", value=np.min(xdata), vary=False)
+
+    def scale_params(self):
+        ymin = np.min(self.ydata)
+        ymax = np.max(self.ydata)
+        self.set_param("A", value=ymax, min=ymax/10.0, max=ymax*10.0)
+        self.set_param("bkg", value=ymin, min=0.0, max=ymin)
+
+    @staticmethod
+    def model(x, params):
+        parvals = params.valuesdict()
+        A = parvals["A"]
+        rmin = parvals["rmin"]
+        alpha = parvals["alpha"]
+        bkg = parvals["bkg"]
+        return A * np.power(x/rmin, -alpha) + bkg
+
+
 class DeprojectSBP:
     """
     Deproject the observed SBP to derive the 3D emission measure (EM)
     profile, using a regularization technique.
+
+    TODO:
+    * add 'mask' support
+    * implement 'optimize_lbd()'
 
     References: ref.[1]
     """
@@ -307,6 +382,8 @@ class DeprojectSBP:
     r_err = None
     s = None
     s_err = None
+    # mask used to exclude specified data point for cross-validation
+    mask = None
     # 'Projection' instance for this SBP
     projector = None
     # 'ABModel' instance to fit the deprojected EM profile for rescaling data
@@ -318,8 +395,6 @@ class DeprojectSBP:
     opt_method = "Powell"
     # scipy optimize results from 'self.deproject()'
     deproject_res = None
-    ####
-    debug_xlist = []
 
     def __init__(self, r, r_err=None, s=None, s_err=None,
                  lbd=1.0, opt_method="Powell"):
@@ -328,7 +403,6 @@ class DeprojectSBP:
         self.abmodel = ABModel(scale=True)
         self.lbd = lbd
         self.opt_method = opt_method
-        self.debug_xlist = []
 
     def load_data(self, r, r_err=None, s=None, s_err=None):
         if r.ndim == 2 and r.shape[1] == 4:
@@ -342,6 +416,7 @@ class DeprojectSBP:
             self.r_err = np.array(r_err)
             self.s = np.array(s)
             self.s_err = np.array(s_err)
+        self.mask = np.ones(self.r.shape, dtype=np.bool)
 
     def deproject(self, lbd=None, opt_method=None):
         """
@@ -364,8 +439,6 @@ class DeprojectSBP:
         em0 = self.projector.deproject(self.s)
         # scale the EM data to reduce the dynamical range
         em0_scaled = self.scale_data(em0, update_params=True)
-        # DEBUG
-        self.debug_xlist.append(em0_scaled)
         res = scipy.optimize.minimize(fun=fobj, x0=em0_scaled,
                                       method=opt_method,
                                       callback=callback,
@@ -381,7 +454,6 @@ class DeprojectSBP:
         If the errors/uncertainties is not specified, it is assumed
         to have the same relative errors as the observed SBP.
         """
-        self.debug_xlist.append(x)
         if xerr is None:
             x_err = x * self.s_err / self.s
         self.abmodel.load_data(xdata=self.r, xerr=self.r_err,
@@ -452,12 +524,141 @@ class DeprojectSBP:
         """
         Function to calculate the value of regularization constraint.
 
-        References: ref.[1], eq.(3)
+        References:
+        [1] ref.[1], eq.(3)
+        [2] ref.[3], eq.(18)
         """
         if not scaled:
             x = self.scale_data(x)
-        constraint = np.sum((x[:-1] + x[1:]) ** 2)
+        # constraint = np.sum((x[:-1] + x[1:]) ** 2)
+        constraint = np.sum((x[:-2] - 2*x[1:-1] + x[2:]) ** 2)
         return constraint
+
+    def optimize_lbd(self, lbd0=None):
+        """
+        Find the optimal smoothing parameter 'lbd' by using the
+        cross-validation method.
+
+        References: ref.[3], eq.(23)
+        """
+        if lbd0 is not None:
+            self.lbd = lbd0
+        pass
+
+    def predict_obs(self):
+        """
+        Predict the observation data (i.e., surface brightness) by
+        projecting the interpolated solved EM profile.
+        """
+        pass
+
+
+class SBP:
+    """
+    X-ray surface brightness profile class.
+
+    This class deals with SBP background subtraction and SBP extrapolation.
+    """
+    # input SBP data: [r, r_err, s, s_err]
+    r = None
+    r_err = None
+    s = None
+    s_err = None
+    # uniform background been subtracted
+    bkg = None
+    # cut/minimal radius from which the SBP is fitted to the PLCModel
+    rcut = None
+    # PLCModel instance used to extrapolate the SBP
+    plcmodel = None
+
+    def __init__(self, r, r_err=None, s=None, s_err=None, rcut=None):
+        self.load_data(r=r, r_err=r_err, s=s, s_err=s_err, rcut=rcut)
+        self.plcmodel = PLCModel(scale=True)
+
+    def load_data(self, r, r_err=None, s=None, s_err=None, rcut=None):
+        if r.ndim == 2 and r.shape[1] == 4:
+            # 4-column data
+            self.r = r[:, 0].copy()
+            self.r_err = r[:, 1].copy()
+            self.s = r[:, 2].copy()
+            self.s_err = r[:, 3].copy()
+        else:
+            self.r = np.array(r)
+            self.r_err = np.array(r_err)
+            self.s = np.array(s)
+            self.s_err = np.array(s_err)
+        self.rcut = rcut
+
+    def subtract_bkg(self, bkg):
+        """
+        Subtract the uniform background from the brightness.
+
+        The value of background can be acquired by fitting the whole
+        or core-exclude SBP with model consisting of a plain beta model
+        and a constant.
+        The "AB model" maybe also applicable.
+        """
+        self.bkg = bkg
+        self.s -= bkg
+        self.bkg_subtracted = True
+
+    def extrapolate(self, rcut=None):
+        """
+        Extrapolate the SBP by assuming that the outer SBP follows the
+        following relation:
+            S_X = A * r^{-alpha},
+        which can be determined by model fitting.
+
+        The SBP is extrapolated to the region where the brightness is
+        lower than the current observed minimal brightness by one order
+        of magnitude, and the extrapolated SBP bins have the same width
+        and relative errors as the last SBP bin observed.
+
+        Note that the uniform background should be subtracted first.
+
+        Return:
+          * self.r_extrapolated
+          * self.r_err_extrapolated
+          * self.s_extrapolated
+          * self.s_err_extrapolated
+          * self.mask_extrapolated
+        """
+        if rcut is not None:
+            self.rcut = rcut
+        self.mask = self.r >= self.rcut
+        self.plcmodel.load_data(xdata=self.r[self.mask],
+                                ydata=self.s[self.mask],
+                                xerr=self.r_err[self.mask],
+                                yerr=self.s_err[self.mask],
+                                update_params=True)
+        self.plcmodel.set_param("bkg", value=0.0, vary=False)
+        self.plcmodel.fit()
+        last_r_err = self.r_err[-1]
+        last_s = self.s[-1]
+        last_s_err = self.s_err[-1]
+        #
+        r_exp = self.r.tolist()
+        r_err_exp = self.r_err.tolist()
+        s_exp = self.s.tolist()
+        s_err_exp = self.s_err.tolist()
+        mask_exp = [False] * len(r_exp)
+        # do extrapolation
+        r_tmp = r_exp[-1] + 2*r_err_exp[-1]
+        s_tmp = self.plcmodel.f(r_tmp)
+        while s_tmp > last_s / 10.0:
+            r_exp.append(r_tmp)
+            r_err_exp.append(last_r_err)
+            s_exp.append(s_tmp)
+            s_err_exp.append(last_s_err)
+            mask_exp.append(True)
+            r_tmp = r_exp[-1] + 2*r_err_exp[-1]
+            s_tmp = self.plcmodel.f(r_tmp)
+        # convert to numpy array
+        self.r_extrapolated = np.array(r_exp)
+        self.r_err_extrapolated = np.array(r_err_exp)
+        self.s_extrapolated = np.array(s_exp)
+        self.s_err_extrapolated = np.array(s_err_exp)
+        self.mask_extrapolated = np.array(mask_exp)
 
 
 def main():
