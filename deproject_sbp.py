@@ -15,10 +15,13 @@
 #
 # Weitian LI
 # Created: 2016-06-10
-# Updated: 2016-06-15
+# Updated: 2016-06-16
 #
 # Change logs:
+# 2016-06-16:
+#   * Add methods 'save()', 'report()' and 'plot()' to class 'SBP'
 # 2016-06-15:
+#   * Add command line arguments
 #   * Add class 'SBP' for SBP background subtraction and extrapolation
 # 2016-06-14:
 #   * Add class 'PLCModel' based on 'FitModel'
@@ -30,10 +33,19 @@
 
 
 import argparse
+import json
+from collections import OrderedDict
 
 import numpy as np
+import pandas as pd
 import scipy.optimize
 import lmfit
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+from configobj import ConfigObj
+
+plt.style.use("ggplot")
 
 
 class Projection:
@@ -649,7 +661,7 @@ class SBP:
             r_exp.append(r_tmp)
             r_err_exp.append(last_r_err)
             s_exp.append(s_tmp)
-            s_err_exp.append(last_s_err)
+            s_err_exp.append(s_tmp * last_s_err / last_s)
             mask_exp.append(True)
             r_tmp = r_exp[-1] + 2*r_err_exp[-1]
             s_tmp = self.plcmodel.f(r_tmp)
@@ -660,12 +672,149 @@ class SBP:
         self.s_err_extrapolated = np.array(s_err_exp)
         self.mask_extrapolated = np.array(mask_exp)
 
+    def report(self, outfile=None):
+        """
+        Report the extrapolation model fitting results.
+        """
+        results = OrderedDict([
+            ("bkg", self.bkg),
+            ("bkg_subtracted", self.bkg_subtracted),
+            ("rcut", self.rcut),
+            ("model", self.plcmodel.name),
+            ("params", OrderedDict([
+                (pn, [par.value, par.min, par.max, par.vary])
+                for pn, par in self.plcmodel.params.items()
+            ])),
+        ])
+        results_json = json.dumps(results, indent=2)
+        if outfile is None:
+            print(results_json)
+        else:
+            open(outfile, "w").write(results_json+"\n")
+
+    def plot(self, ax=None, fig=None):
+        """
+        Make a plot of the SBP extrapolation.
+        """
+        if ax is None:
+            fig, ax = plt.subplots(1, 1)
+        # ignored data points
+        mask_ignore = np.logical_not(self.mask)
+        if np.sum(mask_ignore) > 0:
+            ax.errorbar(self.r[mask_ignore], self.s[mask_ignore],
+                        xerr=self.r_err[mask_ignore],
+                        yerr=self.s_err[mask_ignore],
+                        fmt="none", elinewidth=1, capthick=1)
+        # data points used to fit the PLC model
+        ax.errorbar(self.r[self.mask], self.s[self.mask],
+                    xerr=self.r_err[self.mask],
+                    yerr=self.s_err[self.mask],
+                    fmt="none", elinewidth=2, capthick=2)
+        # extrapolated data points
+        ax.errorbar(self.r_extrapolated[self.mask_extrapolated],
+                    self.s_extrapolated[self.mask_extrapolated],
+                    xerr=self.r_err_extrapolated[self.mask_extrapolated],
+                    yerr=self.s_err_extrapolated[self.mask_extrapolated],
+                    fmt="none", elinewidth=1, capthick=1)
+        # original data points without background subtraction
+        eb = ax.errorbar(self.r, self.s+self.bkg,
+                         xerr=self.r_err, yerr=self.s_err,
+                         fmt="none", elinewidth=1, capthick=1)
+        eb[-1][0].set_linestyle("dashdot")
+        eb[-1][1].set_linestyle("dashdot")
+        # PLC model
+        mask_fit = self.mask_extrapolated.copy()
+        mask_fit[:len(self.mask)] = self.mask
+        r_fit = self.r_extrapolated[mask_fit]
+        s_fit = self.plcmodel.f(r_fit)
+        ax.plot(r_fit, s_fit, color="black", linestyle="solid")
+        # adjust layout
+        r_min = 1.0
+        r_max = self.r_extrapolated[-1] + self.r_err_extrapolated[-1]
+        s_min = min(self.s_extrapolated) / 2.0
+        s_max = max(self.s_extrapolated + self.s_err_extrapolated)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlim(r_min, r_max)
+        ax.set_ylim(s_min, s_max)
+        # labels
+        ax.set_xlabel("Radius (%s)" % "pixel")
+        ax.set_ylabel(r"Surface Brightness (photons/cm$^2$/pixel$^2$/s)")
+        ax.text(x=r_max/1.2, y=s_max/1.2,
+                s=r"reduced $\chi^2$: %.2f / %.2f = %.2f" % (
+                    self.plcmodel.fitted.chisqr, self.plcmodel.fitted.nfree,
+                    self.plcmodel.fitted.chisqr/self.plcmodel.fitted.nfree),
+                horizontalalignment="right", verticalalignment="top")
+        fig.tight_layout()
+        return (fig, ax)
+
+    def save(self, outfile):
+        """
+        Save the (extrapolated) SBP to the given output file in CSV format.
+        """
+        df = pd.DataFrame()
+        df["radius"] = self.r_extrapolated
+        df["radius_err"] = self.r_err_extrapolated
+        df["brightness"] = self.s_extrapolated
+        df["brightness_err"] = self.s_err_extrapolated
+        df["flag_extrapolation"] = self.mask_extrapolated
+        flag_fit = np.zeros(self.mask_extrapolated, dtype=bool)
+        flag_fit[:len(self.mask)] = self.mask
+        df["flag_fit"] = flag_fit
+        df.to_csv(outfile, header=True, index=False)
+
 
 def main():
     parser = argparse.ArgumentParser(
             description="Deproject the surface brightness profile (SBP)")
+    parser.add_argument("--sbpfit", dest="sbpfit", required=True,
+                        default="sbpfit.conf",
+                        help="sbpfit configuration file")
+    parser.add_argument("--sbpexp-rcut-ratio", dest="sbpexp_rcut_ratio",
+                        type=float, default=1.2,
+                        help="cut radius from which the SBP is fitted " +
+                        "the powerlaw to extrapolate, specified by the " +
+                        "ratio w.r.t sbpfit rc (default: 1.2 * rc)")
+    parser.add_argument("--sbpexp-outfile", dest="sbpexp_outfile",
+                        default="sbpexp.txt",
+                        help="output to save the extrapolated SBP data")
+    parser.add_argument("--sbpexp-json", dest="sbpexp_json",
+                        default="sbpexp.json",
+                        help="SBP extrapolation model information")
+    parser.add_argument("--sbpexp-png", dest="sbpexp_png",
+                        default="sbpexp.png",
+                        help="save an image of the SBP extrapolation")
+    parser.add_argument("--emprofile", dest="emprofile",
+                        default="emprofile.txt",
+                        help="deprojected emission measure (EM) profile")
+    parser.add_argument("--emprofile-png", dest="emprofile_png",
+                        default="emprofile.png",
+                        help="save an image of the deprojected EM profile")
     args = parser.parse_args()
 
+    sbpfit_conf = ConfigObj(args.sbpfit)
+    try:
+        sbpfit_outfile = sbpfit_conf[sbpfit_conf["model"]]["outfile"]
+    except KeyError:
+        sbpfit_outfile = sbpfit_conf["outfile"]
+    sbpfit_results = json.load(sbpfit_outfile)
+    sbpdata = np.loadtxt(sbpfit_conf["sbpfile"])
+    rc = sbpfit_results["params"]["rc"][0]
+    bkg = sbpfit_results["params"]["bkg"][0]
+
+    print("SBP background subtraction and extrapolation ...")
+    sbp = SBP(sbpdata)
+    sbp.subtract_bkg(bkg=bkg)
+    sbp.extrapolate(rcut=rc*args.sbpexp_rcut_ratio)
+    sbp.save(outfile=args.sbpexp_outfile)
+    sbp.report(outfile=args.sbpexp_json)
+    fig = Figure(figsize=(10, 8))
+    FigureCanvas(fig)
+    ax = fig.add_subplot(1, 1, 1)
+    sbp.plot(ax=ax, fig=fig)
+    fig.savefig(args.sbpexp_png, dpi=150)
+
+    print("SBP deprojection -> emission measure profile ...")
 
 if __name__ == "__main__":
     main()
