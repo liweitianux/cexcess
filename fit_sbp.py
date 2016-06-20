@@ -48,6 +48,8 @@
 # TODO:
 #   * to allow fit the outer beta component, then fix it, and fit the inner one
 #   * to output the ignored radius range in the same unit as input sbp data
+#   * to estimate the uncertainties for model parameters using the
+#     Monte Carlo method
 #
 
 """
