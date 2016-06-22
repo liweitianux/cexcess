@@ -6,6 +6,7 @@
 #
 # Change logs:
 # 2016-06-22:
+#   * Add class 'DensityProfile', the inversion to 'BrightnessProfile'
 #   * Add classes 'AstroParams' and 'BrightnessProfile'
 #   * Add class 'ChandraPixel'
 #   * Update documentation
@@ -160,7 +161,7 @@ class AstroParams:
     # molecular weight per electron (0.3 solar abundance; grsa table) [1]
     mu_e = 1.155
     # atomic mass unit
-    m_atom = 1.660539040e-24  # [ g ]
+    m_atom = au.u.to(au.g)  # [ g ]
 
 
 class Projection:
@@ -1013,14 +1014,11 @@ class BrightnessProfile:
     * The radii should have unit [ pixel ] (Chandra pixel)
     * The brightness should have unit [ photon s^-1 cm^-2 pixel^-2 ],
       i.e., [ Flux pixel^-2 ] (radial profile column `SUR_FLUX`)
-
-    Reference: ref. [4], eq.(9) below
     """
-    # input SBP data: [r, r_err, s, s_err]
+    # input SBP data: [r, r_err, s]
     r = None
     r_err = None
     s = None
-    s_err = None
     # redshift of the source
     z = None
     # `ChandraPixel` instance for unit conversion
@@ -1035,11 +1033,10 @@ class BrightnessProfile:
         self.pixel = ChandraPixel(z)
 
     def load_data(self, data):
-        # 4-column SBP
+        # 3-column SBP: [r, r_err, brightness]
         self.r = data[:, 0].copy()
         self.r_err = data[:, 1].copy()
         self.s = data[:, 2].copy()
-        self.s_err = data[:, 3].copy()
 
     def load_cf_data(self, data):
         # 2-column cooling function profile
@@ -1058,11 +1055,10 @@ class BrightnessProfile:
             self.r_err *= cm_per_pixel
             self.cf_radius *= cm_per_pixel
             self.s /= cm_per_pixel**2
-            self.s_err /= cm_per_pixel**2
             self.units_converted = True
 
     def get_radius(self):
-        return self.r.copy()
+        return (self.r.copy(), self.r_err.copy())
 
     def calc_electron_density(self):
         """
@@ -1093,6 +1089,63 @@ class BrightnessProfile:
         ne = self.calc_electron_density()
         rho = ne * AstroParams.mu_e * AstroParams.m_atom
         return rho
+
+
+class DensityProfile:
+    """
+    Calculate the 2D surface brightness profile by projecting the
+    electron number density profile / gas mass density profile and
+    incorporating the cooling function profile.
+
+    NOTE:
+    * The radii should have unit [ cm ]
+    * The density should have unit [ cm^-3 ] or [ g cm^-3 ]
+    """
+    # allowed density profile types
+    DENSITY_TYPES = ["electron", "gas"]
+    # input density data: [r, r_err, d]
+    r = None
+    r_err = None
+    d = None
+
+    def __init__(self, cf_data):
+        self.load_cf_data(data=cf_data)
+
+    def load_data(self, data, density_type="electron"):
+        if density_type not in self.DENSITY_TYPES:
+            raise ValueError("invalid density_types: %s" % density_type)
+        # 3-column density profile: [r, r_err, density]
+        self.r = data[:, 0].copy()
+        self.r_err = data[:, 1].copy()
+        self.d = data[:, 2].copy()
+        self.density_type = density_type
+
+    def load_cf_data(self, data):
+        # 2-column cooling function profile
+        self.cf_radius = data[:, 0].copy()
+        self.cf_value = data[:, 1].copy()
+
+    def calc_brightness(self):
+        """
+        Project the electron number density or gas mass density profile
+        to calculate the 2D surface brightness profile.
+        """
+        if self.density_type == "gas":
+            # convert gas mass to electron number density
+            ne = self.d / AstroParams.m_atom / AstroParams.mu_e
+        else:
+            ne = self.d
+        #
+        cf_interp = scipy.interpolate.interp1d(x=self.cf_radius,
+                                               y=self.cf_value,
+                                               kind="linear",
+                                               assume_sorted=True)
+        # flux per unit volume
+        flux = cf_interp(self.r) * ne ** 2 / AstroParams.ratio_ne_np
+        # project the 3D flux
+        projector = Projection(rout=self.r+self.r_err)
+        brightness = projector.project(flux)
+        return brightness
 
 ######################################################################
 
