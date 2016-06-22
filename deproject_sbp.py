@@ -6,6 +6,7 @@
 #
 # Change logs:
 # 2016-06-22:
+#   * Add classes 'AstroParams' and 'BrightnessProfile'
 #   * Add class 'ChandraPixel'
 #   * Update documentation
 # 2016-06-21:
@@ -137,6 +138,7 @@ from astropy.cosmology import FlatLambdaCDM
 import numpy as np
 import pandas as pd
 import scipy.optimize
+import scipy.interpolate
 import lmfit
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
@@ -144,6 +146,21 @@ from matplotlib.figure import Figure
 from configobj import ConfigObj
 
 plt.style.use("ggplot")
+
+
+class AstroParams:
+    """
+    The parameters/constants used in astronomy.
+
+    References:
+    [1] ref. [4], eq.(9) below
+    """
+    # ratio of electron density (n_e) to proton density (n_p) [1]
+    ratio_ne_np = 1.211
+    # molecular weight per electron (0.3 solar abundance; grsa table) [1]
+    mu_e = 1.155
+    # atomic mass unit
+    m_atom = 1.660539040e-24  # [ g ]
 
 
 class Projection:
@@ -951,6 +968,9 @@ class GasDensityProfile:
         pass
 
 
+######################################################################
+
+
 class ChandraPixel:
     """
     Chandra pixel unit conversions.
@@ -981,6 +1001,100 @@ class ChandraPixel:
             D_A = self.cosmo.angular_diameter_distance(z)
             length = D_A * self.angle.to(au.radian).value
         return length
+
+
+class BrightnessProfile:
+    """
+    Calculate the electron number density and/or gas mass density profile
+    by deprojecting the observed X-ray surface brightness profile and
+    incorporating the cooling function profile.
+
+    NOTE:
+    * The radii should have unit [ pixel ] (Chandra pixel)
+    * The brightness should have unit [ photon s^-1 cm^-2 pixel^-2 ],
+      i.e., [ Flux pixel^-2 ] (radial profile column `SUR_FLUX`)
+
+    Reference: ref. [4], eq.(9) below
+    """
+    # input SBP data: [r, r_err, s, s_err]
+    r = None
+    r_err = None
+    s = None
+    s_err = None
+    # redshift of the source
+    z = None
+    # `ChandraPixel` instance for unit conversion
+    pixel = None
+    # flag to indicate whether the units are converted
+    units_converted = False
+
+    def __init__(self, sbp_data, cf_data, z):
+        self.load_data(data=sbp_data)
+        self.load_cf_data(data=cf_data)
+        self.z = z
+        self.pixel = ChandraPixel(z)
+
+    def load_data(self, data):
+        # 4-column SBP
+        self.r = data[:, 0].copy()
+        self.r_err = data[:, 1].copy()
+        self.s = data[:, 2].copy()
+        self.s_err = data[:, 3].copy()
+
+    def load_cf_data(self, data):
+        # 2-column cooling function profile
+        self.cf_radius = data[:, 0].copy()
+        self.cf_value = data[:, 1].copy()
+
+    def convert_units(self):
+        """
+        Convert the units of input data:
+           radius: pixel -> cm
+           brightness: Flux / pixel**2 -> Flux / cm**2
+        """
+        if not self.units_converted:
+            cm_per_pixel = self.pixel.get_length().to(au.cm).value
+            self.r *= cm_per_pixel
+            self.r_err *= cm_per_pixel
+            self.cf_radius *= cm_per_pixel
+            self.s /= cm_per_pixel**2
+            self.s_err /= cm_per_pixel**2
+            self.units_converted = True
+
+    def get_radius(self):
+        return self.r.copy()
+
+    def calc_electron_density(self):
+        """
+        Deproject the surface brightness profile to derive the 3D
+        electron number density (and then gas mass density) profile
+        by incorporating the cooling function profile.
+
+        unit: [ cm^-3 ] if the units converted for input data
+        """
+        projector = Projection(rout=self.r+self.r_err)
+        s_deproj = projector.deproject(self.s)
+        cf_interp = scipy.interpolate.interp1d(x=self.cf_radius,
+                                               y=self.cf_value,
+                                               kind="linear",
+                                               assume_sorted=True)
+        # emission measure per unit volume
+        em_v = s_deproj / cf_interp(self.r)
+        ne = np.sqrt(em_v * AstroParams.ratio_ne_np)
+        return ne
+
+    def calc_gas_density(self):
+        """
+        Calculate the gas mass density based the calculated electron
+        number density.
+
+        unit: [ g cm^-3 ] if the units converted for input data
+        """
+        ne = self.calc_electron_density()
+        rho = ne * AstroParams.mu_e * AstroParams.m_atom
+        return rho
+
+######################################################################
 
 
 def main():
