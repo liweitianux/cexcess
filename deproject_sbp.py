@@ -1,23 +1,17 @@
 #!/usr/bin/env python3
 #
-# Deproject the 2D surface brightness profile (SBP) into the 3D emission
-# measure (EM) profile, using the non-parametric approach.
-# And the 3D gas density profile can be further derived through the 3D
-# EM profile by taking into account the variation of the cooling function
-# Lambda(T, Z) with radius.
-#
-#
-# References:
-# [1] Croston et al. 2006, A&A, 459, 1007-1019
-# [2] McLaughlin, 1999, ApJ, 117, 2398-2427
-# [3] Bouchet, 1995, A&AS, 113, 167
-#
-#
 # Weitian LI
 # Created: 2016-06-10
-# Updated: 2016-06-16
+# Updated: 2016-06-22
 #
 # Change logs:
+# 2016-06-22:
+#   * Add class 'ChandraPixel'
+#   * Update documentation
+# 2016-06-21:
+#   * Add document about the gas density derivation
+# 2016-06-20:
+#   * Use configuration file instead of the tedious command line arguments
 # 2016-06-16:
 #   * Add methods 'save()', 'report()' and 'plot()' to class 'SBP'
 # 2016-06-15:
@@ -31,11 +25,115 @@
 #   * Implement primitive SBP deprojection approach for class 'DeprojectSBP'
 #
 
+"""
+Deproject the 2D surface brightness profile (SBP) into ???
+
+The SBP deprojection is performed using a non-parametric approach with
+regularization which add the constraint that the 3D gas density profile
+should be smooth.
+
+=======================================================================
+
+Surface brightness (`SUR_FLUX` column of the dmextract'ed radial profile):
+    Brightness: [ photon s^-1 cm^-2 pixel^-2 ]
+where the 'cm^-2' is due to the instrumental effective area, and the
+'pixel^-2' is corresponding to the solid angle with respect to the source
+(i.e., [ arcsec^-2 ]).
+
+The flux has dimension:
+    Flux: [ photon s^-1 cm^-2 ]
+therefore, the dimension of brightness can also be expressed as:
+    Brightness: [ Flux pixel^-2 ] = [ Flux sr^-1 ]
+
+The instrument and (time-normalized) exposure map has dimension:
+    [ count photon^-1 cm^2 ]
+which is used to convert the instrument-specific counts image into physical-
+meaningful flux unit.
+
+Emission measure:
+    EM = \int n_e n_H dV ~= (n_e^2 / ratio_eH) V  [ cm^-3 ]
+where 'ratio_eH' is the ratio of electron density to proton density (n_H).
+
+APEC normalization returned by XSPEC is simply the *emission measure* of
+the gas scaled by the distance:
+    eta = (\int n_e n_H dV) / (4 pi (D_A (1+z))^2)
+assuming (ref. [4]):
+    n_H ~= 0.826 n_e
+then the gas density (n_H or n_e) can be calculated.
+
+The flux calculated with the XSPEC `flux` command has dimension:
+    Flux: [ photon s^-1 cm^-2 ] or [ erg s^-2 cm^-2 ]
+
+When use XSPEC APEC model to calculate the cooling function (Lambda),
+its normalization is calculated with EM = 1, therefore:
+    norm = 1e-14 / (4 pi (D_A (1+z))^2) * EM
+         = 1e-14 / (4 pi (D_A (1+z))^2)  [ cm^-5 ]
+where the 'D_A' is the angular diameter distance which can be simply
+calculated from its redshift.
+
+With the Galactic absorption (nH), temperature (varies with radius), and
+abundance (assumed constant) been set, the cooling function is derived by
+using the XSPEC `flux` command.
+Therefore, cooling function has dimension:
+    Lambda: [ Flux EM^-1 ]
+
+By deprojecting the surface brightness, the flux per volume can be derived,
+and EM can be further obtained by incorporating the cooling function,
+and finally the (3D) gas density can be determined.
+    (projection): EM * Lambda / A  ->  Brightness
+where 'A' is the solid angle (i.e., area covered by the source).
+=======================================================================
+
+References:
+[1] Croston et al. 2006, A&A, 459, 1007-1019
+[2] McLaughlin, 1999, ApJ, 117, 2398-2427
+[3] Bouchet, 1995, A&AS, 113, 167
+[4] Ettori et al, 2013, Space Science Review, 177, 119-154
+[5] AtomDB / APEC model:
+    * http://www.atomdb.org/faq.php#DensityXSPECnorm
+    * https://heasarc.gsfc.nasa.gov/docs/xanadu/xspec/manual/XSmodelApec.html
+
+
+Sample configuration file:
+------------------------------------------------------------
+## Configuration for SBP deprojection
+## Date: 2016-06-20
+
+# config file for SBP fitting (e.g., sbpfit.conf)
+sbpfit_config = sbpfit.conf
+
+# input cooling function profile
+coolfunc_profile = coolfunc_profile.txt
+
+## SBP extrapolation
+# cut radius from which the SBP is fitted for extrapolation,
+# specified by the ratio w.r.t sbpfit rc (default: 1.2 * rc)
+sbpexp_rcut_ratio = 1.2
+# output of the extrapolated SBP
+sbpexp_outfile = sbpexp.txt
+# extrapolation model information
+sbpexp_json = sbpexp.json
+# plot of the SBP extrapolation
+sbpexp_image = sbpexp.png
+
+## SBP deprojection
+# deprojected 3D emission measure profile
+em_profile = em_profile.txt
+# deprojected 3D gas density profile
+density_profile = gas_density_profile.txt
+# plot of the deprojected gas density profile
+density_profile_image = gas_density_profile.png
+# save the results of SBP deprojection
+sbpdeproj_json = sbpdeproj.json
+------------------------------------------------------------
+"""
 
 import argparse
 import json
 from collections import OrderedDict
 
+import astropy.units as au
+from astropy.cosmology import FlatLambdaCDM
 import numpy as np
 import pandas as pd
 import scipy.optimize
@@ -299,8 +397,11 @@ class FitModel:
 
 class ABModel(FitModel):
     """
-    AB model is a modified version of the beta model, which can roughly
-    fit both centrally peaked and cored models, e.g., central excess emission.
+    AB model is a modified beta model, which can roughly fit both
+    centrally peaked and cored models, e.g., central excess emission.
+
+    This model is used here to constrain the deprojected 3D gas density
+    profile, in order to require it is smooth enough.
 
     References:
     [1] Pratt & Arnaud, 2002, A&A, 394, 375; eq.(2)
@@ -430,10 +531,24 @@ class DeprojectSBP:
             self.s_err = np.array(s_err)
         self.mask = np.ones(self.r.shape, dtype=np.bool)
 
-    def deproject(self, lbd=None, opt_method=None):
+    def deproject(self):
+        """
+        Deproject the observed SBP through direct deprojection
+        calculation.
+        """
+        self.em = self.projector.deproject(self.s)
+        return self.em
+
+    def deproject_regularize(self, lbd=None, opt_method=None):
         """
         Deproject the observed SBP to derive the 3D EM profile by
-        minimizing the objective function.
+        minimizing the objective function with regularization technique.
+
+        XXX:
+        Since we just deproject the observed SBP without considering
+        the PSF convolution effect, the 3D EM profile can be just solved,
+        therefore, there is no need (also no way) to optimize the
+        smoothing parameter 'lambda'.
         """
         def fobj(x):
             return self.f_objective(x, scaled=True)
@@ -563,6 +678,35 @@ class DeprojectSBP:
         projecting the interpolated solved EM profile.
         """
         pass
+
+    def plot(self, ax=None, fig=None):
+        if ax is None:
+            fig, ax = plt.subplots(1, 1)
+        # SBP data points
+        ax.errorbar(self.r, self.s, xerr=self.r_err, yerr=self.s_err,
+                    fmt="none", elinewidth=2, capthick=2)
+        r_min = 1.0
+        r_max = max(self.r + self.r_err)
+        s_min = min(self.s) / 1.2
+        s_max = max(self.s + self.s_err) * 1.2
+        ax.set_xlim(r_min, r_max)
+        ax.set_ylim(s_min, s_max)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel("Radius (%s)" % "pixel")
+        ax.set_ylabel(r"Surface Brightness (photons/cm$^2$/pixel$^2$/s)")
+        # deprojected EM profile
+        ax2 = ax.twinx()
+        ax2.plot(self.r, self.em, color="black",
+                 linestyle="solid", linewidth=2)
+        em_min = min(self.em) / 1.2
+        em_max = max(self.em) * 1.2
+        ax2.set_xlim(r_min, r_max)
+        ax2.set_ylim(em_min, em_max)
+        ax2.set_yscale(ax.get_yscale())
+        ax2.set_ylabel(r"Deprojected Emission Measure (???)")
+        fig.tight_layout()
+        return (fig, ax, ax2)
 
 
 class SBP:
@@ -731,8 +875,8 @@ class SBP:
         # adjust layout
         r_min = 1.0
         r_max = self.r_extrapolated[-1] + self.r_err_extrapolated[-1]
-        s_min = min(self.s_extrapolated) / 2.0
-        s_max = max(self.s_extrapolated + self.s_err_extrapolated)
+        s_min = min(self.s_extrapolated) / 1.2
+        s_max = max(self.s_extrapolated + self.s_err_extrapolated) * 1.2
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlim(r_min, r_max)
@@ -747,6 +891,15 @@ class SBP:
                 horizontalalignment="right", verticalalignment="top")
         fig.tight_layout()
         return (fig, ax)
+
+    def get_data(self):
+        """
+        Get the extrapolated data, for following use.
+        """
+        return np.column_stack([self.r_extrapolated,
+                                self.r_err_extrapolated,
+                                self.s_extrapolated,
+                                self.s_err_extrapolated])
 
     def save(self, outfile):
         """
@@ -764,35 +917,82 @@ class SBP:
         df.to_csv(outfile, header=True, index=False)
 
 
+class GasDensityProfile:
+    """
+    Derive the gas density profile from the emission measure (EM) profile
+    by considering the cooling function profile.
+    """
+    # radius and EM profile
+    r = None
+    em = None
+
+    def __init__(self, r, em=None):
+        self.load_data(r=r, em=em)
+
+    def load_data(self, r, em=None):
+        if r.ndim == 2 and r.shape[1] == 2:
+            # 2-column data
+            self.r = r[:, 0].copy()
+            self.em = r[:, 2].copy()
+        else:
+            self.r = np.array(r)
+            self.em = np.array(em)
+
+    def load_coolfunc(self, cf):
+        self.cf_radius = cf[:, 0].copy()
+        self.cf_value = cf[:, 1].copy()
+
+    def get_gas_density(self):
+        """
+        Calculate the gas density profile from EM profile.
+
+        NOTE: we do not consider the consistency of units here!
+        """
+        pass
+
+
+class ChandraPixel:
+    """
+    Chandra pixel unit conversions.
+    """
+    angle = 0.492 * au.arcsec
+    z = None
+    # cosmology calculator
+    cosmo = None
+    # angular diameter distance
+    D_A = None
+    # length of one pixel at the given redshift
+    length = None
+
+    def __init__(self, z=None, H0=71, OmegaM0=0.27):
+        self.z = z
+        self.cosmo = FlatLambdaCDM(H0=H0, Om0=OmegaM0)
+        if z is not None:
+            self.D_A = self.cosmo.angular_diameter_distance(z)
+            self.length = self.D_A * self.angle.to(au.radian).value
+
+    def get_angle(self):
+        return self.angle
+
+    def get_length(self, z=None):
+        if z is None:
+            length = self.length
+        else:
+            D_A = self.cosmo.angular_diameter_distance(z)
+            length = D_A * self.angle.to(au.radian).value
+        return length
+
+
 def main():
     parser = argparse.ArgumentParser(
             description="Deproject the surface brightness profile (SBP)")
-    parser.add_argument("--sbpfit", dest="sbpfit", required=True,
-                        default="sbpfit.conf",
-                        help="sbpfit configuration file")
-    parser.add_argument("--sbpexp-rcut-ratio", dest="sbpexp_rcut_ratio",
-                        type=float, default=1.2,
-                        help="cut radius from which the SBP is fitted " +
-                        "the powerlaw to extrapolate, specified by the " +
-                        "ratio w.r.t sbpfit rc (default: 1.2 * rc)")
-    parser.add_argument("--sbpexp-outfile", dest="sbpexp_outfile",
-                        default="sbpexp.txt",
-                        help="output to save the extrapolated SBP data")
-    parser.add_argument("--sbpexp-json", dest="sbpexp_json",
-                        default="sbpexp.json",
-                        help="SBP extrapolation model information")
-    parser.add_argument("--sbpexp-png", dest="sbpexp_png",
-                        default="sbpexp.png",
-                        help="save an image of the SBP extrapolation")
-    parser.add_argument("--emprofile", dest="emprofile",
-                        default="emprofile.txt",
-                        help="deprojected emission measure (EM) profile")
-    parser.add_argument("--emprofile-png", dest="emprofile_png",
-                        default="emprofile.png",
-                        help="save an image of the deprojected EM profile")
+    parser.add_argument("config", nargs="?", default="sbpdeproj.conf",
+                        help="config for SBP deprojection " +
+                             "(default: sbpdeproj.conf)")
     args = parser.parse_args()
 
-    sbpfit_conf = ConfigObj(args.sbpfit)
+    config = ConfigObj(args.config)
+    sbpfit_conf = ConfigObj(config["sbpfit_config"])
     try:
         sbpfit_outfile = sbpfit_conf[sbpfit_conf["model"]]["outfile"]
     except KeyError:
@@ -804,15 +1004,16 @@ def main():
 
     print("SBP background subtraction and extrapolation ...")
     sbp = SBP(sbpdata)
+    rcut = rc * config.as_float("sbpexp_rcut_ratio")
     sbp.subtract_bkg(bkg=bkg)
-    sbp.extrapolate(rcut=rc*args.sbpexp_rcut_ratio)
-    sbp.save(outfile=args.sbpexp_outfile)
-    sbp.report(outfile=args.sbpexp_json)
+    sbp.extrapolate(rcut=rcut)
+    sbp.save(outfile=config["sbpexp_outfile"])
+    sbp.report(outfile=config["sbpexp_json"])
     fig = Figure(figsize=(10, 8))
     FigureCanvas(fig)
     ax = fig.add_subplot(1, 1, 1)
     sbp.plot(ax=ax, fig=fig)
-    fig.savefig(args.sbpexp_png, dpi=150)
+    fig.savefig(config["sbpexp_image"], dpi=150)
 
     print("SBP deprojection -> emission measure profile ...")
 
