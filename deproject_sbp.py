@@ -6,6 +6,8 @@
 #
 # Change logs:
 # 2016-06-23:
+#   * Add configuration parameter 'sbpexp_rcut'
+#   * Allow extrapolate the cooling function profile
 #   * Add plot function to class 'BrightnessProfile'
 #   * Update sample configuration file
 #   * Remove obsolete class 'SurfaceBrightnessProfile'
@@ -102,8 +104,8 @@ References:
 
 Sample configuration file:
 ------------------------------------------------------------
-## Configuration for SBP deprojection
-## Date: 2016-06-20
+## Configuration for `deproject_sbp.py`
+## Date: 2016-06-23
 
 # config file for SBP fitting (e.g., sbpfit.conf)
 sbpfit_config = sbpfit.conf
@@ -112,12 +114,14 @@ sbpfit_config = sbpfit.conf
 coolfunc_profile = coolfunc_profile.txt
 
 # redshift of the object (for pixel to distance conversion)
-redshift = 0.0137
+redshift = <REDSHIFT>
 
 ## SBP extrapolation
 # cut radius from which the SBP is fitted for extrapolation,
 # specified by the ratio w.r.t sbpfit rc (default: 1.2 * rc)
 sbpexp_rcut_ratio = 1.2
+# or directly specify the cut radius (override above rcut ratio)
+sbpexp_rcut = <RCUT>
 # output of the extrapolated SBP
 sbpexp_outfile = sbpexp.csv
 # extrapolation model information
@@ -940,7 +944,7 @@ class SBP:
         df["brightness"] = self.s_extrapolated
         df["brightness_err"] = self.s_err_extrapolated
         df["flag_extrapolation"] = self.mask_extrapolated
-        flag_fit = np.zeros(self.mask_extrapolated, dtype=bool)
+        flag_fit = np.zeros(self.mask_extrapolated.shape, dtype=bool)
         flag_fit[:len(self.mask)] = self.mask
         df["flag_fit"] = flag_fit
         df.to_csv(outfile, header=True, index=False)
@@ -1052,9 +1056,12 @@ class BrightnessProfile:
         """
         projector = Projection(rout=self.r+self.r_err)
         s_deproj = projector.deproject(self.s)
+        # allow extrapolation
         cf_interp = scipy.interpolate.interp1d(x=self.cf_radius,
                                                y=self.cf_value,
                                                kind="linear",
+                                               bounds_error=False,
+                                               fill_value=self.cf_value[-1],
                                                assume_sorted=True)
         # emission measure per unit volume
         em_v = s_deproj / cf_interp(self.r)
@@ -1189,10 +1196,12 @@ class DensityProfile:
             ne = self.d / AstroParams.m_atom / AstroParams.mu_e
         else:
             ne = self.d
-        #
+        # allow extrapolation
         cf_interp = scipy.interpolate.interp1d(x=self.cf_radius,
                                                y=self.cf_value,
                                                kind="linear",
+                                               bounds_error=False,
+                                               fill_value=self.cf_value[-1],
                                                assume_sorted=True)
         # flux per unit volume
         flux = cf_interp(self.r) * ne ** 2 / AstroParams.ratio_ne_np
@@ -1218,7 +1227,7 @@ def main():
         sbpfit_outfile = sbpfit_conf[sbpfit_conf["model"]]["outfile"]
     except KeyError:
         sbpfit_outfile = sbpfit_conf["outfile"]
-    sbpfit_results = json.load(sbpfit_outfile)
+    sbpfit_results = json.load(open(sbpfit_outfile))
     sbpdata = np.loadtxt(sbpfit_conf["sbpfile"])
     rc = sbpfit_results["params"]["rc"][0]
     bkg = sbpfit_results["params"]["bkg"][0]
@@ -1226,6 +1235,10 @@ def main():
     print("SBP background subtraction and extrapolation ...")
     sbp = SBP(sbpdata)
     rcut = rc * config.as_float("sbpexp_rcut_ratio")
+    try:
+        rcut = config.as_float("sbpexp_rcut")
+    except KeyError:
+        pass
     sbp.subtract_bkg(bkg=bkg)
     sbp.extrapolate(rcut=rcut)
     sbp.save(outfile=config["sbpexp_outfile"])
