@@ -2,9 +2,13 @@
 #
 # Weitian LI
 # Created: 2016-06-10
-# Updated: 2016-06-22
+# Updated: 2016-06-23
 #
 # Change logs:
+# 2016-06-23:
+#   * Add plot function to class 'BrightnessProfile'
+#   * Update sample configuration file
+#   * Remove obsolete class 'SurfaceBrightnessProfile'
 # 2016-06-22:
 #   * Add class 'DensityProfile', the inversion to 'BrightnessProfile'
 #   * Add classes 'AstroParams' and 'BrightnessProfile'
@@ -107,26 +111,27 @@ sbpfit_config = sbpfit.conf
 # input cooling function profile
 coolfunc_profile = coolfunc_profile.txt
 
+# redshift of the object (for pixel to distance conversion)
+redshift = 0.0137
+
 ## SBP extrapolation
 # cut radius from which the SBP is fitted for extrapolation,
 # specified by the ratio w.r.t sbpfit rc (default: 1.2 * rc)
 sbpexp_rcut_ratio = 1.2
 # output of the extrapolated SBP
-sbpexp_outfile = sbpexp.txt
+sbpexp_outfile = sbpexp.csv
 # extrapolation model information
 sbpexp_json = sbpexp.json
 # plot of the SBP extrapolation
 sbpexp_image = sbpexp.png
 
-## SBP deprojection
-# deprojected 3D emission measure profile
-em_profile = em_profile.txt
-# deprojected 3D gas density profile
-density_profile = gas_density_profile.txt
-# plot of the deprojected gas density profile
-density_profile_image = gas_density_profile.png
-# save the results of SBP deprojection
-sbpdeproj_json = sbpdeproj.json
+## Density profiles
+# deprojected 3D electron number density profile
+ne_profile = ne_profile.txt
+# deprojected 3D gas mass density profile
+rho_gas_profile = rho_gas_profile.txt
+# image of the density profiles (electron density and/or gas density)
+density_profile_image = density_profile.png
 ------------------------------------------------------------
 """
 
@@ -701,8 +706,9 @@ class DeprojectSBP:
         if ax is None:
             fig, ax = plt.subplots(1, 1)
         # SBP data points
-        ax.errorbar(self.r, self.s, xerr=self.r_err, yerr=self.s_err,
-                    fmt="none", elinewidth=2, capthick=2)
+        eb = ax.errorbar(self.r, self.s, xerr=self.r_err, yerr=self.s_err,
+                         fmt="none", elinewidth=2, capthick=2,
+                         label="Brightness profile")
         r_min = 1.0
         r_max = max(self.r + self.r_err)
         s_min = min(self.s) / 1.2
@@ -715,14 +721,19 @@ class DeprojectSBP:
         ax.set_ylabel(r"Surface Brightness (photons/cm$^2$/pixel$^2$/s)")
         # deprojected EM profile
         ax2 = ax.twinx()
-        ax2.plot(self.r, self.em, color="black",
-                 linestyle="solid", linewidth=2)
+        line, = ax2.plot(self.r, self.em, color="black",
+                         linestyle="solid", linewidth=2,
+                         label="EM profile")
         em_min = min(self.em) / 1.2
         em_max = max(self.em) * 1.2
         ax2.set_xlim(r_min, r_max)
         ax2.set_ylim(em_min, em_max)
         ax2.set_yscale(ax.get_yscale())
         ax2.set_ylabel(r"Deprojected Emission Measure (???)")
+        # legend
+        handles = [eb, line]
+        labels = [h.get_label() for h in handles]
+        ax.legend(handles=handles, labels=labels, loc=0)
         fig.tight_layout()
         return (fig, ax, ax2)
 
@@ -935,40 +946,6 @@ class SBP:
         df.to_csv(outfile, header=True, index=False)
 
 
-class GasDensityProfile:
-    """
-    Derive the gas density profile from the emission measure (EM) profile
-    by considering the cooling function profile.
-    """
-    # radius and EM profile
-    r = None
-    em = None
-
-    def __init__(self, r, em=None):
-        self.load_data(r=r, em=em)
-
-    def load_data(self, r, em=None):
-        if r.ndim == 2 and r.shape[1] == 2:
-            # 2-column data
-            self.r = r[:, 0].copy()
-            self.em = r[:, 2].copy()
-        else:
-            self.r = np.array(r)
-            self.em = np.array(em)
-
-    def load_coolfunc(self, cf):
-        self.cf_radius = cf[:, 0].copy()
-        self.cf_value = cf[:, 1].copy()
-
-    def get_gas_density(self):
-        """
-        Calculate the gas density profile from EM profile.
-
-        NOTE: we do not consider the consistency of units here!
-        """
-        pass
-
-
 ######################################################################
 
 
@@ -1015,10 +992,13 @@ class BrightnessProfile:
     * The brightness should have unit [ photon s^-1 cm^-2 pixel^-2 ],
       i.e., [ Flux pixel^-2 ] (radial profile column `SUR_FLUX`)
     """
-    # input SBP data: [r, r_err, s]
+    # allowed density profile types
+    DENSITY_TYPES = ["electron", "gas"]
+    # input SBP data: [r, r_err, s, s_err]
     r = None
     r_err = None
     s = None
+    s_err = None
     # redshift of the source
     z = None
     # `ChandraPixel` instance for unit conversion
@@ -1033,10 +1013,11 @@ class BrightnessProfile:
         self.pixel = ChandraPixel(z)
 
     def load_data(self, data):
-        # 3-column SBP: [r, r_err, brightness]
+        # 4-column SBP: [r, r_err, brightness, brightness_err]
         self.r = data[:, 0].copy()
         self.r_err = data[:, 1].copy()
         self.s = data[:, 2].copy()
+        self.s_err = data[:, 3].copy()
 
     def load_cf_data(self, data):
         # 2-column cooling function profile
@@ -1055,12 +1036,13 @@ class BrightnessProfile:
             self.r_err *= cm_per_pixel
             self.cf_radius *= cm_per_pixel
             self.s /= cm_per_pixel**2
+            self.s_err /= cm_per_pixel**2
             self.units_converted = True
 
     def get_radius(self):
         return (self.r.copy(), self.r_err.copy())
 
-    def calc_electron_density(self):
+    def calc_electron_density(self, outfile=None):
         """
         Deproject the surface brightness profile to derive the 3D
         electron number density (and then gas mass density) profile
@@ -1077,9 +1059,16 @@ class BrightnessProfile:
         # emission measure per unit volume
         em_v = s_deproj / cf_interp(self.r)
         ne = np.sqrt(em_v * AstroParams.ratio_ne_np)
+        self.ne = ne
+        # save results to output if specified
+        if outfile is not None:
+            ne_profile = np.column_stack([self.r, self.r_err, ne])
+            np.savetxt(outfile, ne_profile,
+                       header="radius[cm]  radius_err[cm]  " +
+                              "electron_number_density[cm^-3]")
         return ne
 
-    def calc_gas_density(self):
+    def calc_gas_density(self, outfile=None):
         """
         Calculate the gas mass density based the calculated electron
         number density.
@@ -1088,7 +1077,72 @@ class BrightnessProfile:
         """
         ne = self.calc_electron_density()
         rho = ne * AstroParams.mu_e * AstroParams.m_atom
+        self.rho_gas = rho
+        # save results to output if specified
+        if outfile is not None:
+            rho_profile = np.column_stack([self.r, self.r_err, rho])
+            np.savetxt(outfile, rho_profile,
+                       header="radius[cm]  radius_err[cm]  " +
+                              "gas_mass_density[g/cm^3]")
         return rho
+
+    def plot(self, ax=None, fig=None, density_type="electron"):
+        if density_type not in self.DENSITY_TYPES:
+            raise ValueError("invalid density_types: %s" % density_type)
+        if density_type == "electron":
+            density = self.ne
+            d_name = "Deprojected electron number density"
+            d_unit = "cm$^{-3}$"
+        else:
+            density = self.rho_gas
+            d_name = "Deprojected gas mass density"
+            d_unit = "g/cm$^3$"
+        #
+        if self.units_converted:
+            # convert from [cm] to [kpc]
+            r = self.r * au.cm.to(au.kpc)
+            r_err = self.r_err * au.cm.to(au.kpc)
+            r_unit = "kpc"
+            s_unit = "flux/cm$^2$"
+        else:
+            r = self.r
+            r_err = self.r_err
+            r_unit = "pixel"
+            s_unit = "flux/pixel$^2$"
+        #
+        if ax is None:
+            fig, ax = plt.subplots(1, 1)
+        # SBP data points
+        eb = ax.errorbar(r, self.s, xerr=r_err, yerr=self.s_err,
+                         fmt="none", elinewidth=2, capthick=2,
+                         label="Brightness profile")
+        r_min = 1.0
+        r_max = max(r + r_err)
+        s_min = min(self.s) / 1.2
+        s_max = max(self.s + self.s_err) * 1.2
+        ax.set_xlim(r_min, r_max)
+        ax.set_ylim(s_min, s_max)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel("Radius (%s)" % r_unit)
+        ax.set_ylabel(r"Surface brightness (%s)" % s_unit)
+        # deprojected density profile
+        ax2 = ax.twinx()
+        line, = ax2.plot(r, density, color="black",
+                         linestyle="solid", linewidth=2,
+                         label="Density profile")
+        d_min = min(density) / 1.2
+        d_max = max(density) * 1.2
+        ax2.set_xlim(r_min, r_max)
+        ax2.set_ylim(d_min, d_max)
+        ax2.set_yscale(ax.get_yscale())
+        ax2.set_ylabel(r"%s (%s)" % (d_name, d_unit))
+        # legend
+        handles = [eb, line]
+        labels = [h.get_label() for h in handles]
+        ax.legend(handles=handles, labels=labels, loc=0)
+        fig.tight_layout()
+        return (fig, ax, ax2)
 
 
 class DensityProfile:
@@ -1182,7 +1236,24 @@ def main():
     sbp.plot(ax=ax, fig=fig)
     fig.savefig(config["sbpexp_image"], dpi=150)
 
-    print("SBP deprojection -> emission measure profile ...")
+    # TODO: smooth the extrapolated SBP
+
+    print("SBP deprojection -> density profile ...")
+    redshift = config.as_float("redshift")
+    cf_data = np.loadtxt(config["coolfunc_profile"])
+    sbpdata_extrapolated = sbp.get_data()
+    brightness_profile = BrightnessProfile(sbp_data=sbpdata_extrapolated,
+                                           cf_data=cf_data,
+                                           z=redshift)
+    brightness_profile.convert_units()
+    brightness_profile.calc_electron_density(outfile=config["ne_profile"])
+    brightness_profile.calc_gas_density(outfile=config["rho_gas_profile"])
+    fig = Figure(figsize=(10, 8))
+    FigureCanvas(fig)
+    ax = fig.add_subplot(1, 1, 1)
+    brightness_profile.plot(ax=ax, fig=fig)
+    fig.savefig(config["density_profile_image"], dpi=150)
+
 
 if __name__ == "__main__":
     main()
