@@ -6,6 +6,7 @@
 #
 # Change logs:
 # 2016-06-24:
+#   * Move class 'DensityProfile' to tool 'calc_mass_potential.py'
 #   * Split class 'AstroParams' to separate module 'astro_params.py'
 # 2016-06-23:
 #   * Add configuration parameter 'sbpexp_rcut'
@@ -1047,6 +1048,7 @@ class BrightnessProfile:
         projector = Projection(rout=self.r+self.r_err)
         s_deproj = projector.deproject(self.s)
         # allow extrapolation
+        # XXX: cubic spline / smooth spline better ??
         cf_interp = scipy.interpolate.interp1d(x=self.cf_radius,
                                                y=self.cf_value,
                                                kind="linear",
@@ -1140,65 +1142,6 @@ class BrightnessProfile:
         ax.legend(handles=handles, labels=labels, loc=0)
         fig.tight_layout()
         return (fig, ax, ax2)
-
-
-class DensityProfile:
-    """
-    Calculate the 2D surface brightness profile by projecting the
-    electron number density profile / gas mass density profile and
-    incorporating the cooling function profile.
-
-    NOTE:
-    * The radii should have unit [ cm ]
-    * The density should have unit [ cm^-3 ] or [ g cm^-3 ]
-    """
-    # allowed density profile types
-    DENSITY_TYPES = ["electron", "gas"]
-    # input density data: [r, r_err, d]
-    r = None
-    r_err = None
-    d = None
-
-    def __init__(self, cf_data):
-        self.load_cf_data(data=cf_data)
-
-    def load_data(self, data, density_type="electron"):
-        if density_type not in self.DENSITY_TYPES:
-            raise ValueError("invalid density_types: %s" % density_type)
-        # 3-column density profile: [r, r_err, density]
-        self.r = data[:, 0].copy()
-        self.r_err = data[:, 1].copy()
-        self.d = data[:, 2].copy()
-        self.density_type = density_type
-
-    def load_cf_data(self, data):
-        # 2-column cooling function profile
-        self.cf_radius = data[:, 0].copy()
-        self.cf_value = data[:, 1].copy()
-
-    def calc_brightness(self):
-        """
-        Project the electron number density or gas mass density profile
-        to calculate the 2D surface brightness profile.
-        """
-        if self.density_type == "gas":
-            # convert gas mass to electron number density
-            ne = self.d / AstroParams.m_atom / AstroParams.mu_e
-        else:
-            ne = self.d
-        # allow extrapolation
-        cf_interp = scipy.interpolate.interp1d(x=self.cf_radius,
-                                               y=self.cf_value,
-                                               kind="linear",
-                                               bounds_error=False,
-                                               fill_value=self.cf_value[-1],
-                                               assume_sorted=True)
-        # flux per unit volume
-        flux = cf_interp(self.r) * ne ** 2 / AstroParams.ratio_ne_np
-        # project the 3D flux
-        projector = Projection(rout=self.r+self.r_err)
-        brightness = projector.project(flux)
-        return brightness
 
 ######################################################################
 
