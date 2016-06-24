@@ -4,6 +4,10 @@
 # Created: 2016-06-24
 # Updated: 2016-06-24
 #
+# Change logs:
+# 2016-06-24:
+#   * Update method 'gen_radius()'
+#
 
 """
 Calculate the (gas and gravitational) mass profile and gravitational
@@ -207,15 +211,30 @@ class DensityProfile:
             bounds_error=False, fill_value=self.t_value[-1],
             assume_sorted=True)
 
-    def gen_radius(self, num=100):
+    def gen_radius(self, num=1000):
         """
         Generate radial points for following mass and potential calculation.
 
         The generated radial points are logarithmic-evenly distributed.
+
+        NOTE:
+        The radii are first generated to determine the inner-most bin width,
+        which is used to further divide the original inner-most bin (i.e.,
+        radius 0 - r_out[0]), and then the other radii are generated with
+        the constraint of given total number of points.
         """
         rout = self.r + self.r_err
-        rout_new = np.logspace(np.log10(rout[0]), np.log10(rout[-1]),
+        # first pass to determine the inner-most bin width
+        rout_tmp = np.logspace(np.log10(rout[0]), np.log10(rout[-1]),
                                num=num, base=10.0)
+        bw = rout_tmp[1] - rout_tmp[0]
+        # linear-evenly divide the first original bin (0 - rout[0])
+        nbin = int(np.ceil(rout[0] / bw))
+        rout_new1 = np.linspace(0.0, rout[0], num=nbin, endpoint=False)[1:]
+        # second pass to generate the other radii
+        rout_new2 = np.logspace(np.log10(rout[0]), np.log10(rout[-1]),
+                                num=(num-nbin+1), base=10.0)
+        rout_new = np.concatenate([rout_new1, rout_new2])
         rin_new = np.concatenate([[0.0], rout_new[:-1]])
         self.radius = (rout_new + rin_new) / 2.0
         self.radius_err = (rout_new - rin_new) / 2.0
@@ -232,7 +251,8 @@ class DensityProfile:
         #
         m_gas = np.zeros(self.radius.shape)
         if verbose:
-            print("Calculating the gas mass profile (#%d) ... " % len(m_gas))
+            print("Calculating the gas mass profile (#%d): ..." % len(m_gas),
+                  end="", flush=True)
         for i, r in enumerate(self.radius):
             if verbose and (i+1) % 10 == 0:
                 print("%d..." % (i+1), end="", flush=True)
