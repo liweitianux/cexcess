@@ -2,9 +2,11 @@
 #
 # Weitian LI
 # Created: 2016-06-10
-# Updated: 2016-06-23
+# Updated: 2016-06-24
 #
 # Change logs:
+# 2016-06-24:
+#   * Split class 'AstroParams' to separate module 'astro_params.py'
 # 2016-06-23:
 #   * Add configuration parameter 'sbpexp_rcut'
 #   * Allow extrapolate the cooling function profile
@@ -155,22 +157,9 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from configobj import ConfigObj
 
+from astro_params import AstroParams
+
 plt.style.use("ggplot")
-
-
-class AstroParams:
-    """
-    The parameters/constants used in astronomy.
-
-    References:
-    [1] ref. [4], eq.(9) below
-    """
-    # ratio of electron density (n_e) to proton density (n_p) [1]
-    ratio_ne_np = 1.211
-    # molecular weight per electron (0.3 solar abundance; grsa table) [1]
-    mu_e = 1.155
-    # atomic mass unit
-    m_atom = au.u.to(au.g)  # [ g ]
 
 
 class Projection:
@@ -966,9 +955,10 @@ class ChandraPixel:
     # length of one pixel at the given redshift
     length = None
 
-    def __init__(self, z=None, H0=71, OmegaM0=0.27):
+    def __init__(self, z=None):
         self.z = z
-        self.cosmo = FlatLambdaCDM(H0=H0, Om0=OmegaM0)
+        self.cosmo = FlatLambdaCDM(H0=AstroParams.H0,
+                                   Om0=AstroParams.OmegaM0)
         if z is not None:
             self.D_A = self.cosmo.angular_diameter_distance(z)
             self.length = self.D_A * self.angle.to(au.radian).value
