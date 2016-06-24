@@ -6,6 +6,7 @@
 #
 # Change logs:
 # 2016-06-24:
+#   * Move class 'ChandraPixel' to module 'astro_params.py'
 #   * Split class 'Projection' to a separate module 'projection.py'
 #   * Move class 'DensityProfile' to tool 'calc_mass_potential.py'
 #   * Split class 'AstroParams' to separate module 'astro_params.py'
@@ -148,7 +149,6 @@ import json
 from collections import OrderedDict
 
 import astropy.units as au
-from astropy.cosmology import FlatLambdaCDM
 import numpy as np
 import pandas as pd
 import scipy.optimize
@@ -159,7 +159,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from configobj import ConfigObj
 
-from astro_params import AstroParams
+from astro_params import AstroParams, ChandraPixel
 from projection import Projection
 
 plt.style.use("ggplot")
@@ -807,39 +807,6 @@ class SBP:
 
 
 ######################################################################
-
-
-class ChandraPixel:
-    """
-    Chandra pixel unit conversions.
-    """
-    angle = 0.492 * au.arcsec
-    z = None
-    # cosmology calculator
-    cosmo = None
-    # angular diameter distance
-    D_A = None
-    # length of one pixel at the given redshift
-    length = None
-
-    def __init__(self, z=None):
-        self.z = z
-        self.cosmo = FlatLambdaCDM(H0=AstroParams.H0,
-                                   Om0=AstroParams.OmegaM0)
-        if z is not None:
-            self.D_A = self.cosmo.angular_diameter_distance(z)
-            self.length = self.D_A * self.angle.to(au.radian).value
-
-    def get_angle(self):
-        return self.angle
-
-    def get_length(self, z=None):
-        if z is None:
-            length = self.length
-        else:
-            D_A = self.cosmo.angular_diameter_distance(z)
-            length = D_A * self.angle.to(au.radian).value
-        return length
 
 
 class BrightnessProfile:
