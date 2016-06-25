@@ -2,20 +2,63 @@
 #
 # Weitian LI
 # Created: 2016-06-24
-# Updated: 2016-06-24
+# Updated: 2016-06-25
 #
 # Change logs:
+# 2016-06-25:
+#   * Update documentation
 # 2016-06-24:
 #   * Update method 'gen_radius()'
 #
 
 """
 Calculate the (gas and gravitational) mass profile and gravitational
-potential profile from the electron number density profile.
-The temperature profile is required.
+potential profile from the electron number density profile, under the
+assumption of hydrostatic equilibrium.
+
+The electron density profile and temperature profile are required.
+
+Assuming that the gas is in hydrostatic equilibrium with the gravitational
+potential and a spherically-symmetric distribution of the gas, we can
+write the hydrostatic equilibrium equation (HEE) of the ICM as
+(ref.[1], eq.(6)):
+    derivative(P_gas, r) / rho_gas = - derivative(phi, r)
+                                   = - G M_tot(<r) / r^2
+where,
+    phi: gravitational potential;
+    G: gravitational constant;
+    rho_gas: gas mass density:
+        rho_gas = mu * m_atom * n_gas
+    P_gas: gas pressure:
+        P_gas = rho_gas * k_B * T_gas / (mu * m_atom) = n_gas * k_B * T_gas
+    mu: mean molecular weight in a.m.u (i.e., m_atom) (~ 0.6)
+    m_atom: atom mass unit
+    n_gas: gas number density; sum of the electron and proton densities
+    k_B: Boltzmann constant
+    T_gas: gas temperature
+
+Solve the above equation, we can get the total mass of X-ray luminous
+galaxy clusters (ref.[1], eq.(7)):
+    M_tot(<r) = - (k_B * T_gas(r) * r) / (mu * m_atom * G) *
+                (derivative(log(T_gas), log(r)) +
+                 derivative(log(n_gas), log(r)))
+
+Note that the second part (the derivatives) is DIMENSIONLESS, since
+    d(log(X)) = d(X) / X
+Also note that ('R' is a ratio constant):
+    d(log(n_gas)) = d(log(R*n_e)) = d(log(n_e))
+
+Note that 'kT' has dimension of energy.  Therefore, if the gas temperature
+is given in 'keV', then the 'kT' should be substitute as a whole.
+
+For example:
+    (1.0 keV) * (1.0 kpc) / (0.6 * m_atom * G) ~= 3.7379e10 [ Msun ]
+which is consistent with the formula of (ref.[2], eq.(3))
+
 
 References:
-[1] Ettori et al, 2013, Space Science Review, 177, 119-154
+[1] Ettori et al., 2013, Space Science Review, 177, 119-154
+[2] Walker et al., 2012, MNRAS, 422, 3503
 
 
 Sample configuration file:
@@ -40,11 +83,16 @@ t_profile = t_profile.txt
 t_unit = "pixel"
 
 # number of data points for the output profile calculation
-num_dp = 100
+num_dp = 1000
 
 # output gas mass profile
 m_gas_profile = mass_gas_profile.txt
 
+# output total (gravitational) mass profile
+m_total_profile = mass_total_profile.txt
+
+# output gravitational potential profile
+potential_profile = potential_profile.txt
 ------------------------------------------------------------
 """
 
