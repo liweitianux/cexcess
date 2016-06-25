@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-04-29
-# Updated: 2016-05-18
+# Updated: 2016-06-25
 #
 # Change log:
+# 2016-06-25:
+#   * Use 'InterpolatedUnivariateSpline' instead of 'interp1d'
 # 2016-05-18:
 #   * Roughly implement the PEI uncertainty estimation
 #   * Fix/Update PEI Y positions determination
@@ -34,8 +36,8 @@ import json
 from collections import OrderedDict
 
 import numpy as np
-import scipy.interpolate
-import scipy.integrate
+import scipy.interpolate as interpolate
+import scipy.integrate as integrate
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
@@ -85,9 +87,8 @@ def calc_pei(data, r500, interp_np=101, pei_pos=None):
     # data points within the PEI range
     mask_pei = np.logical_and(x >= pei_xmin, x <= pei_xmax)
     y_pei = y[mask_pei]
-    # interpolate the power spectrum
-    f_interp = scipy.interpolate.interp1d(x, y, kind="linear",
-                                          assume_sorted=True)
+    # interpolate the power spectrum by fitting a smoothing spline
+    f_interp = interpolate.InterpolatedUnivariateSpline(x, y)
     x_interp = np.linspace(pei_xmin, pei_xmax, num=interp_np)
     y_interp = f_interp(x_interp)
     # determine the Y positions of PEI rectangle
@@ -111,7 +112,7 @@ def calc_pei(data, r500, interp_np=101, pei_pos=None):
     y_interp[y_interp < pei_ymin] = pei_ymin
     # calculate the PEI
     area_total = (pei_xmax - pei_xmin) * (pei_ymax - pei_ymin)
-    area_below = scipy.integrate.trapz((y_interp-pei_ymin), x_interp)
+    area_below = integrate.trapz((y_interp-pei_ymin), x_interp)
     pei_value = area_below / area_total
     results = {
         "pei_xmin":   pei_xmin,
