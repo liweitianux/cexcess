@@ -6,6 +6,8 @@
 #
 # Change logs:
 # 2016-06-25:
+#   * Use 'InterpolatedUnivariateSpline' instead of 'interp1d'
+#   * Implement 'calc_mass_total()'
 #   * Update documentation
 # 2016-06-24:
 #   * Update method 'gen_radius()'
@@ -47,6 +49,8 @@ Note that the second part (the derivatives) is DIMENSIONLESS, since
     d(log(X)) = d(X) / X
 Also note that ('R' is a ratio constant):
     d(log(n_gas)) = d(log(R*n_e)) = d(log(n_e))
+And and 'log' derivative can be calculated as:
+    derivative(log(X(r)), log(r)) = (r / X(r)) * derivative(X(r), r)
 
 Note that 'kT' has dimension of energy.  Therefore, if the gas temperature
 is given in 'keV', then the 'kT' should be substitute as a whole.
@@ -100,8 +104,10 @@ import argparse
 
 import numpy as np
 import astropy.units as au
+import astropy.constants as ac
 import scipy.interpolate as interpolate
 import scipy.integrate as integrate
+from scipy.misc import derivative
 from configobj import ConfigObj
 
 from astro_params import AstroParams, ChandraPixel
@@ -211,49 +217,51 @@ class DensityProfile:
             self.rho_gas = self.d.copy()
         return self.rho_gas
 
-    def interpolate(self):
+    def interpolate(self, verbose=False):
         """
         Interpolate the density profile, cooling function profile,
         and temperature profile.
 
         NOTE:
-        * Linear interpolation may be bad because the total mass calculation
-          needs to take the derivative of electron density profile and
-          temperature profile.  Therefore, smooth spline is a better choice.
+        * Simple interpolation (`scipy.interpolate.interp1d` of kinds
+          `linear` or `quadratic` or `cubic`) may lead to a severely
+          oscillating curve (e.g., electron density profile), which
+          further cause problems for following mass calculation
+          due to the needs to take the derivative.
+        * `InterpolatedUnivariateSpline` or `UnivariateSpline` is a
+          better choice than the above `interp1d`.
         * Allow cooling function profile and temperature profile to be
           extrapolated by filling with the last value if necessary.
-
-        XXX:
-        * How to extrapolate the smooth spline if necessary ??
         """
         # density profile
         # insert a data point at radius of zero
-        self.d_interp = interpolate.interp1d(
+        if verbose:
+            print("Interpolating density profile ...")
+        self.d_interp = interpolate.InterpolatedUnivariateSpline(
             x=np.concatenate([[0.0], self.r]),
-            y=np.concatenate([[self.d[0]], self.d]),
-            kind="linear",
-            bounds_error=False, fill_value=self.d[-1],
-            assume_sorted=True)
+            y=np.concatenate([[self.d[0]], self.d]))
         if self.ne is not None:
-            self.ne_interp = interpolate.interp1d(
+            if verbose:
+                print("Interpolating electron number density profile ...")
+            self.ne_interp = interpolate.InterpolatedUnivariateSpline(
                 x=np.concatenate([[0.0], self.r]),
-                y=np.concatenate([[self.ne[0]], self.ne]),
-                kind="linear",
-                bounds_error=False, fill_value=self.ne[-1],
-                assume_sorted=True)
+                y=np.concatenate([[self.ne[0]], self.ne]))
         if self.rho_gas is not None:
-            self.rho_gas_interp = interpolate.interp1d(
+            if verbose:
+                print("Interpolating gas mass density profile ...")
+            self.rho_gas_interp = interpolate.InterpolatedUnivariateSpline(
                 x=np.concatenate([[0.0], self.r]),
-                y=np.concatenate([[self.rho_gas[0]], self.rho_gas]),
-                kind="linear",
-                bounds_error=False, fill_value=self.rho_gas[-1],
-                assume_sorted=True)
+                y=np.concatenate([[self.rho_gas[0]], self.rho_gas]))
         # cooling function profile
+        if verbose:
+            print("Interpolating cooling function profile ...")
         self.cf_interp = interpolate.interp1d(
             x=self.cf_radius, y=self.cf_value, kind="linear",
             bounds_error=False, fill_value=self.cf_value[-1],
             assume_sorted=True)
         # temperature profile
+        if verbose:
+            print("Interpolating temperature profile ...")
         self.t_interp = interpolate.interp1d(
             x=self.t_radius, y=self.t_value, kind="linear",
             bounds_error=False, fill_value=self.t_value[-1],
@@ -302,11 +310,12 @@ class DensityProfile:
             print("Calculating the gas mass profile (#%d): ..." % len(m_gas),
                   end="", flush=True)
         for i, r in enumerate(self.radius):
-            if verbose and (i+1) % 10 == 0:
+            if verbose and (i+1) % 50 == 0:
                 print("%d..." % (i+1), end="", flush=True)
             # integrated gas mass [ g ]
             m_gas[i] = integrate.quad(_f_rho_gas, a=0.0, b=r,
-                                      epsabs=1.0e5, epsrel=1.e-2)[0]
+                                      epsabs=1e-5*au.kpc.to(au.cm),
+                                      epsrel=1e-3)[0]
         if verbose:
             print("DONE!", flush=True)
         self.m_gas = m_gas
@@ -319,18 +328,33 @@ class DensityProfile:
 
         References: ref.[1], eq.(5,6,7)
         """
-        if self.cf_radius is None or self.cf_value is None:
-            raise ValueError("cooling function profile required")
         if self.t_radius is None or self.t_value is None:
             raise ValueError("temperature profile required")
         #
+        # calculate the coefficient of the total mass formula
+        # M0 = (k_B * T_gas(r) * r) / (mu * m_atom * G)
+        M0 = ((1.0*au.keV) * (1.0*au.cm) /
+              (AstroParams.mu * ac.u * ac.G)).to(au.g).value
         m_total = np.zeros(self.radius.shape)
         if verbose:
-            print("Calculating the total mass profile (#%d) ... " %
-                  len(m_total))
-            # TODO:
+            print("Calculating the total mass profile (#%d): ..." %
+                  len(m_total), end="", flush=True)
+        for i, r in enumerate(self.radius):
+            if verbose and (i+1) % 100 == 0:
+                print("%d..." % (i+1), end="", flush=True)
+            # enclosed total mass [ g ]
+            m_total[i] = - M0 * self.t_interp(r) * r * (
+                ((r / self.t_interp(r)) *
+                 derivative(self.t_interp, r, dx=0.01*au.kpc.to(au.cm))) +
+                ((r / self.ne_interp(r)) *
+                 derivative(self.ne_interp, r, dx=0.01*au.kpc.to(au.cm))))
+        if verbose:
+            print("DONE!", flush=True)
         self.m_total = m_total
         return m_total
+
+    def plot(self, profile, ax=None, fig=None):
+        pass
 
     def save(self, profile, outfile):
         if profile == "mass_gas":
@@ -338,6 +362,11 @@ class DensityProfile:
                                     self.radius_err,
                                     self.m_gas])
             header = "radius[cm]  radius_err[cm]  mass_gas(<r)[g]"
+        elif profile == "mass_total":
+            data = np.column_stack([self.radius,
+                                    self.radius_err,
+                                    self.m_total])
+            header = "radius[cm]  radius_err[cm]  mass_total(<r)[g]"
         else:
             raise ValueError("unknown profile name: %s" % profile)
         np.savetxt(outfile, data, header=header)
@@ -386,11 +415,16 @@ def main():
                                      density_type="electron")
     density_profile.load_cf_profile(cf_profile)
     density_profile.load_t_profile(t_profile)
+    density_profile.calc_electron_density()
     density_profile.calc_gas_density()
-    density_profile.interpolate()
+    density_profile.interpolate(verbose=True)
     density_profile.gen_radius(num=config.as_int("num_dp"))
     density_profile.calc_mass_gas(verbose=True)
-    density_profile.save(profile="mass_gas", outfile=config["m_gas_profile"])
+    density_profile.save(profile="mass_gas",
+                         outfile=config["m_gas_profile"])
+    density_profile.calc_mass_total(verbose=True)
+    density_profile.save(profile="mass_total",
+                         outfile=config["m_total_profile"])
 
 
 if __name__ == "__main__":
