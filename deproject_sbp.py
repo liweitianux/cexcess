@@ -2,9 +2,11 @@
 #
 # Weitian LI
 # Created: 2016-06-10
-# Updated: 2016-06-24
+# Updated: 2016-06-25
 #
 # Change logs:
+# 2016-06-25:
+#   * Use 'InterpolatedUnivariateSpline' instead of 'interp1d'
 # 2016-06-24:
 #   * Move class 'ChandraPixel' to module 'astro_params.py'
 #   * Split class 'Projection' to a separate module 'projection.py'
@@ -151,8 +153,8 @@ from collections import OrderedDict
 import astropy.units as au
 import numpy as np
 import pandas as pd
-import scipy.optimize
-import scipy.interpolate
+import scipy.optimize as optimize
+import scipy.interpolate as interpolate
 import lmfit
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
@@ -449,10 +451,10 @@ class DeprojectSBP:
         em0 = self.projector.deproject(self.s)
         # scale the EM data to reduce the dynamical range
         em0_scaled = self.scale_data(em0, update_params=True)
-        res = scipy.optimize.minimize(fun=fobj, x0=em0_scaled,
-                                      method=opt_method,
-                                      callback=callback,
-                                      options={"disp": True})
+        res = optimize.minimize(fun=fobj, x0=em0_scaled,
+                                method=opt_method,
+                                callback=callback,
+                                options={"disp": True})
         self.deproject_res = res
         self.em = self.unscale_data(res.x)
         return self.em
@@ -881,15 +883,11 @@ class BrightnessProfile:
         projector = Projection(rout=self.r+self.r_err)
         s_deproj = projector.deproject(self.s)
         # allow extrapolation
-        # XXX: cubic spline / smooth spline better ??
-        cf_interp = scipy.interpolate.interp1d(x=self.cf_radius,
-                                               y=self.cf_value,
-                                               kind="linear",
-                                               bounds_error=False,
-                                               fill_value=self.cf_value[-1],
-                                               assume_sorted=True)
+        # XXX: smooth spline better ??
+        cf_spline = interpolate.InterpolatedUnivariateSpline(
+            x=self.cf_radius, y=self.cf_value, ext="const")
         # emission measure per unit volume
-        em_v = s_deproj / cf_interp(self.r)
+        em_v = s_deproj / cf_spline(self.r)
         ne = np.sqrt(em_v * AstroParams.ratio_ne_np)
         self.ne = ne
         # save results to output if specified
