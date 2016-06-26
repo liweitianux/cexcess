@@ -2,7 +2,11 @@
 #
 # Weitian LI
 # Created: 2016-06-25
-# Updated: 2016-06-25
+# Updated: 2016-06-26
+#
+# Change logs:
+# 2016-06-26:
+#   * Allow missing data columns
 #
 
 """
@@ -97,7 +101,11 @@ def parse_line(line, colspec):
             value = line[col_begin:].strip()
         else:
             value = line[col_begin:(col_end+1)].strip()
-        items.append((name, t(value), comment))
+        try:
+            value = t(value)
+        except ValueError:
+            value = None
+        items.append((name, value, comment))
     return items
 
 
