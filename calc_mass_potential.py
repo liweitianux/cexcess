@@ -2,9 +2,12 @@
 #
 # Weitian LI
 # Created: 2016-06-24
-# Updated: 2016-06-26
+# Updated: 2016-06-27
 #
 # Change logs:
+# 2016-06-27:
+#   * Implement potential profile calculation:
+#     methods 'calc_density_total()' and 'calc_potential()'
 # 2016-06-26:
 #   * Add document on gravitational potential calculation
 # 2016-06-25:
@@ -129,6 +132,9 @@ m_gas_profile = mass_gas_profile.txt
 # output total (gravitational) mass profile
 m_total_profile = mass_total_profile.txt
 
+# output total mass density profile
+rho_total_profile = rho_total_profile.txt
+
 # output gravitational potential profile
 potential_profile = potential_profile.txt
 ------------------------------------------------------------
@@ -189,6 +195,8 @@ class DensityProfile:
     m_gas = None
     # total (gravitational) mass profile: M_total(<r)
     m_total = None
+    # total mass density profile (required by potential calculation)
+    rho_total = None
     # potential profile (cut at the largest available radius)
     potential = None
 
@@ -221,7 +229,7 @@ class DensityProfile:
         """
         if self.cf_radius is None or self.cf_value is None:
             raise ValueError("cooling function profile missing")
-        ne = self.calc_electron_density()
+        ne = self.calc_density_electron()
         # flux per unit volume
         flux = self.cf_spline(self.r) * ne ** 2 / AstroParams.ratio_ne_np
         # project the 3D flux
@@ -229,7 +237,7 @@ class DensityProfile:
         brightness = projector.project(flux)
         return brightness
 
-    def calc_electron_density(self):
+    def calc_density_electron(self):
         """
         Calculate the electron number density from the gas mass density
         if necessary.
@@ -240,7 +248,7 @@ class DensityProfile:
             self.ne = self.d / AstroParams.m_atom / AstroParams.mu_e
         return self.ne
 
-    def calc_gas_density(self):
+    def calc_density_gas(self):
         """
         Calculate the gas mass density from the electron number density
         if necessary.
@@ -337,8 +345,8 @@ class DensityProfile:
         #
         m_gas = np.zeros(self.radius.shape)
         if verbose:
-            print("Calculating the gas mass profile (#%d): ..." % len(m_gas),
-                  end="", flush=True)
+            print("Calculating the gas mass profile (#%d): ..." %
+                  len(self.radius), end="", flush=True)
         for i, r in enumerate(self.radius):
             if verbose and (i+1) % 50 == 0:
                 print("%d..." % (i+1), end="", flush=True)
@@ -368,7 +376,7 @@ class DensityProfile:
         m_total = np.zeros(self.radius.shape)
         if verbose:
             print("Calculating the total mass profile (#%d): ..." %
-                  len(m_total), end="", flush=True)
+                  len(self.radius), end="", flush=True)
         for i, r in enumerate(self.radius):
             if verbose and (i+1) % 100 == 0:
                 print("%d..." % (i+1), end="", flush=True)
@@ -383,11 +391,64 @@ class DensityProfile:
         self.m_total = m_total
         return m_total
 
+    def calc_density_total(self, verbose=True):
+        """
+        Calculate the total mass density profile, which is required to
+        calculate the following gravitational potential profile.
+        """
+        rho_total = np.zeros(self.radius.shape)
+        if verbose:
+            print("Calculating the total mass density profile ...")
+            print(">>> Fitting spline to total mass profile ...")
+        self.m_total_spline = interpolate.InterpolatedUnivariateSpline(
+            x=self.radius, y=self.m_total, ext="const")
+        for i, r in enumerate(self.radius):
+            rho_total[i] = (derivative(self.m_total_spline, r,
+                                       dx=0.01*au.kpc.to(au.cm)) /
+                            (4 * np.pi * r**2))
+        self.rho_total = rho_total
+        if verbose:
+            print(">>> Fitting spline to total mass density profile ...")
+        self.rho_total_spline = interpolate.InterpolatedUnivariateSpline(
+            x=self.radius, y=rho_total, ext="const")
+
     def calc_potential(self, verbose=True):
         """
         Calculate the gravitational potential profile.
+
+        NOTE:
+        The integral in the potential formula can only be integrated
+        to the largest radius of availability.
+        This limitation will affect the absolute values of the calculated
+        potentials, but not the shape of the potential profile.
         """
-        pass
+        def _int_inner(x):
+            return x**2 * self.rho_total_spline(x)
+
+        def _int_outer(x):
+            return x * self.rho_total_spline(x)
+
+        if self.rho_total is None:
+            self.calc_density_total(verbose=verbose)
+        potential = np.zeros(self.radius.shape)
+        if verbose:
+            print("Calculating the potential profile (#%d): ..." %
+                  len(self.radius), end="", flush=True)
+        r_max = max(self.radius)
+        for i, r in enumerate(self.radius):
+            if verbose and (i+1) % 50 == 0:
+                print("%d..." % (i+1), end="", flush=True)
+            potential[i] = - 4 * np.pi * ac.G.cgs.value * (
+                (1/r) * integrate.quad(_int_inner, a=0.0, b=r,
+                                       epsabs=1e-5*au.kpc.to(au.cm),
+                                       epsrel=1e-3)[0] +
+                integrate.quad(_int_outer, a=r, b=r_max,
+                               epsabs=1e-5*au.kpc.to(au.cm),
+                               epsrel=1e-3)[0])
+        if verbose:
+            print("DONE!", flush=True)
+        self.potential = potential
+        return potential
 
     def plot(self, profile, ax=None, fig=None):
         pass
@@ -403,6 +464,16 @@ class DensityProfile:
                                     self.radius_err,
                                     self.m_total])
             header = "radius[cm]  radius_err[cm]  mass_total(<r)[g]"
+        elif profile == "rho_total":
+            data = np.column_stack([self.radius,
+                                    self.radius_err,
+                                    self.rho_total])
+            header = "radius[cm]  radius_err[cm]  density_total[g/cm^3]"
+        elif profile == "potential":
+            data = np.column_stack([self.radius,
+                                    self.radius_err,
+                                    self.potential])
+            header = "radius[cm]  radius_err[cm]  potential[???]"
         else:
             raise ValueError("unknown profile name: %s" % profile)
         np.savetxt(outfile, data, header=header)
@@ -451,8 +522,8 @@ def main():
                                      density_type="electron")
     density_profile.load_cf_profile(cf_profile)
     density_profile.load_t_profile(t_profile)
-    density_profile.calc_electron_density()
-    density_profile.calc_gas_density()
+    density_profile.calc_density_electron()
+    density_profile.calc_density_gas()
     density_profile.fit_spline(verbose=True)
     density_profile.gen_radius(num=config.as_int("num_dp"))
     density_profile.calc_mass_gas(verbose=True)
@@ -461,6 +532,12 @@ def main():
     density_profile.calc_mass_total(verbose=True)
     density_profile.save(profile="mass_total",
                          outfile=config["m_total_profile"])
+    density_profile.calc_density_total(verbose=True)
+    density_profile.save(profile="rho_total",
+                         outfile=config["rho_total_profile"])
+    density_profile.calc_potential(verbose=True)
+    density_profile.save(profile="potential",
+                         outfile=config["potential_profile"])
 
 
 if __name__ == "__main__":
