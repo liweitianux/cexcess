@@ -6,6 +6,7 @@
 #
 # Change logs:
 # 2016-06-26:
+#   * Split out method "save()" for class "BrightnessProfile"
 #   * Split classes 'FitModel', 'ABModel' and 'PLCModel' into separate
 #     module 'fitting_models.py'
 # 2016-06-25:
@@ -641,6 +642,12 @@ class BrightnessProfile:
     pixel = None
     # flag to indicate whether the units are converted
     units_converted = False
+    # fitted smoothing spline to the SBP
+    s_spline = None
+    # calculated electron density profile
+    ne = None
+    # calculated gas mass density profile
+    rho_gas = None
 
     def __init__(self, sbp_data, cf_data, z):
         self.load_data(data=sbp_data)
@@ -678,7 +685,7 @@ class BrightnessProfile:
     def get_radius(self):
         return (self.r.copy(), self.r_err.copy())
 
-    def calc_electron_density(self, outfile=None):
+    def calc_electron_density(self):
         """
         Deproject the surface brightness profile to derive the 3D
         electron number density (and then gas mass density) profile
@@ -696,15 +703,9 @@ class BrightnessProfile:
         em_v = s_deproj / cf_spline(self.r)
         ne = np.sqrt(em_v * AstroParams.ratio_ne_np)
         self.ne = ne
-        # save results to output if specified
-        if outfile is not None:
-            ne_profile = np.column_stack([self.r, self.r_err, ne])
-            np.savetxt(outfile, ne_profile,
-                       header="radius[cm]  radius_err[cm]  " +
-                              "electron_number_density[cm^-3]")
         return ne
 
-    def calc_gas_density(self, outfile=None):
+    def calc_gas_density(self):
         """
         Calculate the gas mass density based the calculated electron
         number density.
@@ -714,13 +715,24 @@ class BrightnessProfile:
         ne = self.calc_electron_density()
         rho = ne * AstroParams.mu_e * AstroParams.m_atom
         self.rho_gas = rho
-        # save results to output if specified
-        if outfile is not None:
-            rho_profile = np.column_stack([self.r, self.r_err, rho])
-            np.savetxt(outfile, rho_profile,
-                       header="radius[cm]  radius_err[cm]  " +
-                              "gas_mass_density[g/cm^3]")
         return rho
+
+    def save(self, density_type, outfile):
+        if density_type == "electron":
+            data = np.column_stack([self.r,
+                                    self.r_err,
+                                    self.ne])
+            header = "radius[cm]  radius_err[cm]  " + \
+                     "electron_number_density[cm^-3]"
+        elif density_type == "gas":
+            data = np.column_stack([self.r,
+                                    self.r_err,
+                                    self.rho_gas])
+            header = "radius[cm]  radius_err[cm]  " + \
+                     "gas_mass_density[g/cm^3]"
+        else:
+            raise ValueError("unknown density_type: %s" % density_type)
+        np.savetxt(outfile, data, header=header)
 
     def plot(self, ax=None, fig=None, density_type="electron"):
         if density_type not in self.DENSITY_TYPES:
@@ -829,8 +841,12 @@ def main():
                                            cf_data=cf_data,
                                            z=redshift)
     brightness_profile.convert_units()
-    brightness_profile.calc_electron_density(outfile=config["ne_profile"])
-    brightness_profile.calc_gas_density(outfile=config["rho_gas_profile"])
+    brightness_profile.calc_electron_density()
+    brightness_profile.save(density_type="electron",
+                            outfile=config["ne_profile"])
+    brightness_profile.calc_gas_density()
+    brightness_profile.save(density_type="gas",
+                            outfile=config["rho_gas_profile"])
     fig = Figure(figsize=(10, 8))
     FigureCanvas(fig)
     ax = fig.add_subplot(1, 1, 1)
