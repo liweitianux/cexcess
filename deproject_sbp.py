@@ -2,9 +2,13 @@
 #
 # Weitian LI
 # Created: 2016-06-10
-# Updated: 2016-06-26
+# Updated: 2016-06-27
 #
 # Change logs:
+# 2016-06-27:
+#   * Fit smoothing spline to SBP and cooling function profiles by
+#     calling the R `mgcv::gam()`: "fit_spline()" and "eval_spline()"
+#   * Update "plot()" to also plot the fitted smoothing spline
 # 2016-06-26:
 #   * Split out method "save()" for class "BrightnessProfile"
 #   * Split classes 'FitModel', 'ABModel' and 'PLCModel' into separate
@@ -163,6 +167,9 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from configobj import ConfigObj
+
+import rpy2.robjects as ro
+from rpy2.robjects.packages import importr
 
 from astro_params import AstroParams, ChandraPixel
 from projection import Projection
@@ -629,6 +636,8 @@ class BrightnessProfile:
     * The brightness should have unit [ photon s^-1 cm^-2 pixel^-2 ],
       i.e., [ Flux pixel^-2 ] (radial profile column `SUR_FLUX`)
     """
+    # available splines
+    SPLINES = ["brightness", "cooling_function"]
     # allowed density profile types
     DENSITY_TYPES = ["electron", "gas"]
     # input SBP data: [r, r_err, s, s_err]
@@ -642,12 +651,18 @@ class BrightnessProfile:
     pixel = None
     # flag to indicate whether the units are converted
     units_converted = False
-    # fitted smoothing spline to the SBP
-    s_spline = None
     # calculated electron density profile
     ne = None
     # calculated gas mass density profile
     rho_gas = None
+    # fitted smoothing spline to the SBP
+    s_spline = None
+    s_spline_log10 = None
+    # fitted smoothing spline to the cooling function profile
+    cf_spline = None
+    cf_spline_log10 = None
+    # call R through `rpy2`
+    mgcv = importr("mgcv")
 
     def __init__(self, sbp_data, cf_data, z):
         self.load_data(data=sbp_data)
@@ -685,6 +700,80 @@ class BrightnessProfile:
     def get_radius(self):
         return (self.r.copy(), self.r_err.copy())
 
+    def fit_spline(self, spline, log10=True):
+        """
+        Fit a smoothing line to the specified spline data,
+        by calling the R `mgcv::gam()` function.
+
+        If 'log10' is True, the input data are first applied the log-scale
+        transform, and then fitted by the smoothing spline.
+
+        The fitted spline allows extrapolation.
+        """
+        if spline not in self.SPLINES:
+            raise ValueError("invalid spline: %s" % spline)
+        #
+        if spline == "brightness":
+            if log10:
+                x = ro.FloatVector(np.log10(self.r))
+                y = ro.FloatVector(np.log10(self.s))
+                self.s_spline_log10 = True
+            else:
+                x = ro.FloatVector(self.r)
+                y = ro.FloatVector(self.s)
+                self.s_spline_log10 = False
+            weights = ro.FloatVector(self.s / self.s_err)
+            self.s_spline = self.mgcv.gam(
+                ro.Formula("y ~ s(x, bs='ps')"),
+                weights=weights,
+                data=ro.DataFrame({"x": x, "y": y}),
+                method="REML")
+        elif spline == "cooling_function":
+            if log10:
+                x = ro.FloatVector(np.log10(self.cf_radius))
+                y = ro.FloatVector(np.log10(self.cf_value))
+                self.cf_spline_log10 = True
+            else:
+                x = ro.FloatVector(self.cf_radius)
+                y = ro.FloatVector(self.cf_value)
+                self.cf_spline_log10 = False
+            self.cf_spline = self.mgcv.gam(
+                ro.Formula("y ~ s(x, bs='ps')"),
+                data=ro.DataFrame({"x": x, "y": y}),
+                method="REML")
+
+    def eval_spline(self, spline, x):
+        """
+        Evaluate the specified spline at the supplied positions.
+        Also check whether the spline was fitted in the log-scale space,
+        and transform the evaluated values if necessary.
+        """
+        x = np.array(x)
+        if x.shape == ():
+            x = x.reshape((1,))
+        if spline == "brightness":
+            spl = self.s_spline
+            log10 = self.s_spline_log10
+        elif spline == "cooling_function":
+            spl = self.cf_spline
+            log10 = self.cf_spline_log10
+        else:
+            raise ValueError("invalid spline: %s" % spline)
+        #
+        if log10:
+            x_new = ro.ListVector({"x": ro.FloatVector(np.log10(x))})
+            y_pred = self.mgcv.predict_gam(spl, newdata=x_new)
+            y_pred = 10 ** np.array(y_pred)
+        else:
+            x_new = ro.ListVector({"x": ro.FloatVector(x)})
+            y_pred = self.mgcv.predict_gam(spl, newdata=x_new)
+            y_pred = np.array(y_pred)
+        #
+        if len(y_pred) == 1:
+            return y_pred[0]
+        else:
+            return y_pred
+
     def calc_electron_density(self):
         """
         Deproject the surface brightness profile to derive the 3D
@@ -693,14 +782,18 @@ class BrightnessProfile:
 
         unit: [ cm^-3 ] if the units converted for input data
         """
+        if self.s_spline is None:
+            self.fit_spline(spline="brightness", log10=True)
+        if self.cf_spline is None:
+            self.fit_spline(spline="cooling_function", log10=False)
+        #
+        s_new = self.eval_spline(spline="brightness", x=self.r)
+        cf_new = self.eval_spline(spline="cooling_function", x=self.r)
+        #
         projector = Projection(rout=self.r+self.r_err)
-        s_deproj = projector.deproject(self.s)
-        # allow extrapolation
-        # XXX: smooth spline better ??
-        cf_spline = interpolate.InterpolatedUnivariateSpline(
-            x=self.cf_radius, y=self.cf_value, ext="const")
+        s_deproj = projector.deproject(s_new)
         # emission measure per unit volume
-        em_v = s_deproj / cf_spline(self.r)
+        em_v = s_deproj / cf_new
         ne = np.sqrt(em_v * AstroParams.ratio_ne_np)
         self.ne = ne
         return ne
@@ -764,6 +857,11 @@ class BrightnessProfile:
         eb = ax.errorbar(r, self.s, xerr=r_err, yerr=self.s_err,
                          fmt="none", elinewidth=2, capthick=2,
                          label="Brightness profile")
+        # fitted smoothing spline to SBP
+        s_new = self.eval_spline(spline="brightness", x=self.r)
+        line1, = ax.plot(r, s_new, linestyle="dashed", linewidth=2,
+                         label="SBP smoothing spline")
+        #
         r_min = 1.0
         r_max = max(r + r_err)
         s_min = min(self.s) / 1.2
@@ -776,9 +874,9 @@ class BrightnessProfile:
         ax.set_ylabel(r"Surface brightness (%s)" % s_unit)
         # deprojected density profile
         ax2 = ax.twinx()
-        line, = ax2.plot(r, density, color="black",
-                         linestyle="solid", linewidth=2,
-                         label="Density profile")
+        line2, = ax2.plot(r, density, color="black",
+                          linestyle="solid", linewidth=2,
+                          label="Density profile")
         d_min = min(density) / 1.2
         d_max = max(density) * 1.2
         ax2.set_xlim(r_min, r_max)
@@ -786,7 +884,7 @@ class BrightnessProfile:
         ax2.set_yscale(ax.get_yscale())
         ax2.set_ylabel(r"%s (%s)" % (d_name, d_unit))
         # legend
-        handles = [eb, line]
+        handles = [eb, line1, line2]
         labels = [h.get_label() for h in handles]
         ax.legend(handles=handles, labels=labels, loc=0)
         fig.tight_layout()
