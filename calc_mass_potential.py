@@ -6,6 +6,8 @@
 #
 # Change logs:
 # 2016-06-28:
+#   * Implement plot function
+#   * Adjust integration tolerances and progress report
 #   * Fit smoothing splines to profiles using R `mgcv::gam()`
 # 2016-06-27:
 #   * Implement potential profile calculation:
@@ -106,7 +108,7 @@ References:
 Sample configuration file:
 ------------------------------------------------------------
 ## Configuration for `calc_mass_potential.py`
-## Date: 2016-06-24
+## Date: 2016-06-28
 
 # redshift used for pixel to distance conversion
 redshift = <REDSHIFT>
@@ -129,15 +131,19 @@ num_dp = 1000
 
 # output gas mass profile
 m_gas_profile = mass_gas_profile.txt
+m_gas_profile_image = mass_gas_profile.png
 
 # output total (gravitational) mass profile
 m_total_profile = mass_total_profile.txt
+m_total_profile_image = mass_total_profile.png
 
 # output total mass density profile
 rho_total_profile = rho_total_profile.txt
+rho_total_profile_image = rho_total_profile.png
 
 # output gravitational potential profile
 potential_profile = potential_profile.txt
+potential_profile_image = potential_profile.png
 ------------------------------------------------------------
 """
 
@@ -146,16 +152,20 @@ import argparse
 import numpy as np
 import astropy.units as au
 import astropy.constants as ac
-import scipy.interpolate as interpolate
 import scipy.integrate as integrate
 from scipy.misc import derivative
 from configobj import ConfigObj
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 import rpy2.robjects as ro
 from rpy2.robjects.packages import importr
 
 from astro_params import AstroParams, ChandraPixel
 from projection import Projection
+
+plt.style.use("ggplot")
 
 
 class DensityProfile:
@@ -588,18 +598,52 @@ class DensityProfile:
                 print("%d..." % (i+1), end="", flush=True)
             potential[i] = - 4 * np.pi * ac.G.cgs.value * (
                 (1/r) * integrate.quad(_int_inner, a=0.0, b=r,
-                                       epsabs=1e-5*au.kpc.to(au.cm),
-                                       epsrel=1e-3)[0] +
+                                       epsabs=1e-3*au.kpc.to(au.cm),
+                                       epsrel=1e-2)[0] +
                 integrate.quad(_int_outer, a=r, b=r_max,
-                               epsabs=1e-5*au.kpc.to(au.cm),
-                               epsrel=1e-3)[0])
+                               epsabs=1e-3*au.kpc.to(au.cm),
+                               epsrel=1e-2)[0])
         if verbose:
             print("DONE!", flush=True)
         self.potential = potential
         return potential
 
     def plot(self, profile, ax=None, fig=None):
-        pass
+        x = self.radius * au.cm.to(au.kpc)
+        xlabel = "3D Radius"
+        xunit = "kpc"
+        xscale = "log"
+        yscale = "log"
+        if profile == "mass_gas":
+            y = self.m_gas * au.g.to(au.solMass)
+            ylabel = "Gas mass"
+            yunit = "M$_{\odot}$"
+        elif profile == "mass_total":
+            y = self.m_total * au.g.to(au.solMass)
+            ylabel = "Total mass"
+            yunit = "M$_{\odot}$"
+        elif profile == "rho_total":
+            y = self.rho_total
+            ylabel = "Total mass density"
+            yunit = "g/cm$^3$"
+        elif profile == "potential":
+            y = self.potential
+            ylabel = "Gravitational potential"
+            yunit = "???"
+            yscale = "linear"
+        else:
+            raise ValueError("unknown profile name: %s" % profile)
+        #
+        if ax is None:
+            fig, ax = plt.subplots(1, 1)
+        ax.plot(x, y, linewidth=2)
+        ax.set_xscale(xscale)
+        ax.set_yscale(yscale)
+        ax.set_xlim(min(x), max(x))
+        ax.set_xlabel(r"%s (%s)" % (xlabel, xunit))
+        ax.set_ylabel(r"%s (%s)" % (ylabel, yunit))
+        fig.tight_layout()
+        return (fig, ax)
 
     def save(self, profile, outfile):
         if profile == "mass_gas":
@@ -673,18 +717,42 @@ def main():
     density_profile.calc_density_electron()
     density_profile.calc_density_gas()
     density_profile.gen_radius(num=config.as_int("num_dp"))
+
     density_profile.calc_mass_gas(verbose=True)
     density_profile.save(profile="mass_gas",
                          outfile=config["m_gas_profile"])
+    fig = Figure(figsize=(10, 8))
+    FigureCanvas(fig)
+    ax = fig.add_subplot(1, 1, 1)
+    density_profile.plot(profile="mass_gas", ax=ax, fig=fig)
+    fig.savefig(config["m_gas_profile_image"], dpi=150)
+
     density_profile.calc_mass_total(verbose=True)
     density_profile.save(profile="mass_total",
                          outfile=config["m_total_profile"])
+    fig = Figure(figsize=(10, 8))
+    FigureCanvas(fig)
+    ax = fig.add_subplot(1, 1, 1)
+    density_profile.plot(profile="mass_total", ax=ax, fig=fig)
+    fig.savefig(config["m_total_profile_image"], dpi=150)
+
     density_profile.calc_density_total(verbose=True)
     density_profile.save(profile="rho_total",
                          outfile=config["rho_total_profile"])
+    fig = Figure(figsize=(10, 8))
+    FigureCanvas(fig)
+    ax = fig.add_subplot(1, 1, 1)
+    density_profile.plot(profile="rho_total", ax=ax, fig=fig)
+    fig.savefig(config["rho_total_profile_image"], dpi=150)
+
     density_profile.calc_potential(verbose=True)
     density_profile.save(profile="potential",
                          outfile=config["potential_profile"])
+    fig = Figure(figsize=(10, 8))
+    FigureCanvas(fig)
+    ax = fig.add_subplot(1, 1, 1)
+    density_profile.plot(profile="potential", ax=ax, fig=fig)
+    fig.savefig(config["potential_profile_image"], dpi=150)
 
 
 if __name__ == "__main__":
