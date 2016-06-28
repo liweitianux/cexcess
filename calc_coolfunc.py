@@ -4,22 +4,26 @@
 #
 # Aaron LI
 # Created: 2016-06-19
-# Updated: 2016-06-19
+# Updated: 2016-06-27
+#
+# Change logs:
+# 2016-06-27:
+#   * Minor style fixes
+#   * Change 'tprofile' to 't_profile'
 #
 
 """
-Calculate the 'cooling function' profile with respect to the
-given 'temperature profile' and the average abundance, redshift,
+Calculate the *cooling function* profile with respect to the
+given *temperature profile* and the average abundance, redshift,
 and column density nH, using the XSPEC model 'wabs*apec'.
 
-Sample config file:
+Sample configuration file:
 ------------------------------------------------------------
-# Configuration file for `calc_coolfunc.py`
-# Aaron LI
-# 2016-06-19
+## Configuration file for `calc_coolfunc.py`
+## 2016-06-27
 
 # temperature profile fitted & extrapolated by model: [r, T]
-tprofile = tprofile.txt
+t_profile = t_profile.txt
 
 # average abundance (unit: solar)
 abundance = 0.5
@@ -85,7 +89,7 @@ dummyrsp 0.01 100.0 4096 linear
 model wabs*apec & %(nh)s & 1.0 & %(abundance)s & %(redshift)s & %(apec_norm)s & /*
 
 # input and output files
-set tpro_fn "%(tprofile)s"
+set tpro_fn "%(t_profile)s"
 set cf_fn "%(coolfunc)s"
 if { [ file exists $cf_fn ] } {
     exec rm -fv $cf_fn
@@ -158,7 +162,7 @@ def main():
         "prog_name":    os.path.basename(sys.argv[0]),
         "cur_date":     datetime.now().isoformat(),
         #
-        "tprofile":     config["tprofile"],
+        "t_profile":    config["t_profile"],
         "abundance":    config.as_float("abundance"),
         "abund_table":  config.get("abund_table", "grsa"),
         "redshift":     redshift,
