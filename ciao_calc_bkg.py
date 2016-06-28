@@ -7,7 +7,7 @@
 # subtract the background contribution before carrying out the SBP
 # deprojection.
 #
-# Weitian LI
+# Aaron LI
 # Created: 2016-06-10
 # Updated: 2016-06-10
 #
