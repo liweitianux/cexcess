@@ -6,6 +6,8 @@
 #
 # Change logs:
 # 2016-06-27:
+#   * Minor cleanups
+#   * Remove obsolete class "DeprojectSBP"
 #   * Fit smoothing spline to SBP and cooling function profiles by
 #     calling the R `mgcv::gam()`: "fit_spline()" and "eval_spline()"
 #   * Update "plot()" to also plot the fitted smoothing spline
@@ -161,8 +163,6 @@ from collections import OrderedDict
 import astropy.units as au
 import numpy as np
 import pandas as pd
-import scipy.optimize as optimize
-import scipy.interpolate as interpolate
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -173,245 +173,9 @@ from rpy2.robjects.packages import importr
 
 from astro_params import AstroParams, ChandraPixel
 from projection import Projection
-from fitting_models import ABModel, PLCModel
+from fitting_models import PLCModel
 
 plt.style.use("ggplot")
-
-
-class DeprojectSBP:
-    """
-    Deproject the observed SBP to derive the 3D emission measure (EM)
-    profile, using a regularization technique.
-
-    TODO:
-    * add 'mask' support
-    * implement 'optimize_lbd()'
-
-    References: ref.[1]
-    """
-    # input SBP data: [r, r_err, s, s_err]
-    r = None
-    r_err = None
-    s = None
-    s_err = None
-    # mask used to exclude specified data point for cross-validation
-    mask = None
-    # 'Projection' instance for this SBP
-    projector = None
-    # 'ABModel' instance to fit the deprojected EM profile for rescaling data
-    abmodel = None
-    # smoothing parameter to balance between fidelity (chisq) and
-    # consistency with the applied regularization constraint.
-    lbd = 1.0
-    # optimization method for scipy minimize
-    opt_method = "Powell"
-    # scipy optimize results from 'self.deproject()'
-    deproject_res = None
-
-    def __init__(self, r, r_err=None, s=None, s_err=None,
-                 lbd=1.0, opt_method="Powell"):
-        self.load_data(r=r, r_err=r_err, s=s, s_err=s_err)
-        self.projector = Projection(rout=self.r+self.r_err)
-        self.abmodel = ABModel(scale=True)
-        self.lbd = lbd
-        self.opt_method = opt_method
-
-    def load_data(self, r, r_err=None, s=None, s_err=None):
-        if r.ndim == 2 and r.shape[1] == 4:
-            # 4-column data
-            self.r = r[:, 0].copy()
-            self.r_err = r[:, 1].copy()
-            self.s = r[:, 2].copy()
-            self.s_err = r[:, 3].copy()
-        else:
-            self.r = np.array(r)
-            self.r_err = np.array(r_err)
-            self.s = np.array(s)
-            self.s_err = np.array(s_err)
-        self.mask = np.ones(self.r.shape, dtype=np.bool)
-
-    def deproject(self):
-        """
-        Deproject the observed SBP through direct deprojection
-        calculation.
-        """
-        self.em = self.projector.deproject(self.s)
-        return self.em
-
-    def deproject_regularize(self, lbd=None, opt_method=None):
-        """
-        Deproject the observed SBP to derive the 3D EM profile by
-        minimizing the objective function with regularization technique.
-
-        XXX:
-        Since we just deproject the observed SBP without considering
-        the PSF convolution effect, the 3D EM profile can be just solved,
-        therefore, there is no need (also no way) to optimize the
-        smoothing parameter 'lambda'.
-        """
-        def fobj(x):
-            return self.f_objective(x, scaled=True)
-
-        def callback(x):
-            # NOTE: 'x' here is the scaled EM solution
-            x_unscaled = self.unscale_data(x)
-            self.update_abmodel(x_unscaled)
-
-        if lbd is not None:
-            self.lbd = lbd
-        if opt_method is None:
-            opt_method = self.opt_method
-        # initial guess
-        em0 = self.projector.deproject(self.s)
-        # scale the EM data to reduce the dynamical range
-        em0_scaled = self.scale_data(em0, update_params=True)
-        res = optimize.minimize(fun=fobj, x0=em0_scaled,
-                                method=opt_method,
-                                callback=callback,
-                                options={"disp": True})
-        self.deproject_res = res
-        self.em = self.unscale_data(res.x)
-        return self.em
-
-    def update_abmodel(self, x, xerr=None, update_params=False):
-        """
-        Load the supplied data into self.abmodel, and perform fitting.
-
-        If the errors/uncertainties is not specified, it is assumed
-        to have the same relative errors as the observed SBP.
-        """
-        if xerr is None:
-            x_err = x * self.s_err / self.s
-        self.abmodel.load_data(xdata=self.r, xerr=self.r_err,
-                               ydata=x, yerr=x_err,
-                               update_params=update_params)
-        self.abmodel.fit()
-
-    def scale_data(self, x, xerr=None, update_params=False):
-        """
-        Scale the data (i.e., 3D EM profile) by dividing the fitted
-        AB model.
-
-        If the errors/uncertainties is not specified, it is assumed
-        to have the same relative errors as the observed SBP.
-        """
-        self.update_abmodel(x=x, xerr=xerr, update_params=update_params)
-        x_fitted = self.abmodel.f(self.r)
-        x_scaled = x / x_fitted
-        return x_scaled
-
-    def unscale_data(self, x):
-        """
-        Undo the data scaling by multiplying the same fitted model
-        previously used to scale the data.
-        """
-        x_fitted = self.abmodel.f(self.r)
-        x_unscaled = x * x_fitted
-        return x_unscaled
-
-    def f_objective(self, x, scaled=False):
-        """
-        The objective function to be minimized, in order to derive the
-        best solution (i.e., deprojected SBP) for the observed SBP.
-
-        This objective function is a combination of plain chi-squared
-        and a regularization constraint.
-
-        'lbd' is the parameter to balance the goodness-of-fit and the
-        regularization constraint.
-
-        References: ref.[1], eq.(2)
-        """
-        return (self.f_chisq(x, scaled=scaled) +
-                self.lbd * self.f_constraint(x, scaled=scaled))
-
-    def f_residual(self, x, scaled=False):
-        """
-        Calculate the residuals of each data point for the solution.
-
-        The current solution (i.e., 3D EM profile) is first projected
-        into the 2D SBP, then compared to the observed SBP.
-        """
-        if scaled:
-            x = self.unscale_data(x)
-        x_2d = self.projector.project(x)
-        residuals = (x_2d - self.s) / self.s_err
-        return residuals
-
-    def f_chisq(self, x, scaled=False):
-        """
-        Function to calculate the chi-squared value of the current
-        solution with respect to the data.
-        """
-        chisq = np.sum(self.f_residual(x, scaled=scaled) ** 2)
-        return chisq
-
-    def f_constraint(self, x, scaled=False):
-        """
-        Function to calculate the value of regularization constraint.
-
-        References:
-        [1] ref.[1], eq.(3)
-        [2] ref.[3], eq.(18)
-        """
-        if not scaled:
-            x = self.scale_data(x)
-        # constraint = np.sum((x[:-1] + x[1:]) ** 2)
-        constraint = np.sum((x[:-2] - 2*x[1:-1] + x[2:]) ** 2)
-        return constraint
-
-    def optimize_lbd(self, lbd0=None):
-        """
-        Find the optimal smoothing parameter 'lbd' by using the
-        cross-validation method.
-
-        References: ref.[3], eq.(23)
-        """
-        if lbd0 is not None:
-            self.lbd = lbd0
-        pass
-
-    def predict_obs(self):
-        """
-        Predict the observation data (i.e., surface brightness) by
-        projecting the interpolated solved EM profile.
-        """
-        pass
-
-    def plot(self, ax=None, fig=None):
-        if ax is None:
-            fig, ax = plt.subplots(1, 1)
-        # SBP data points
-        eb = ax.errorbar(self.r, self.s, xerr=self.r_err, yerr=self.s_err,
-                         fmt="none", elinewidth=2, capthick=2,
-                         label="Brightness profile")
-        r_min = 1.0
-        r_max = max(self.r + self.r_err)
-        s_min = min(self.s) / 1.2
-        s_max = max(self.s + self.s_err) * 1.2
-        ax.set_xlim(r_min, r_max)
-        ax.set_ylim(s_min, s_max)
-        ax.set_xscale("log")
-        ax.set_yscale("log")
-        ax.set_xlabel("Radius (%s)" % "pixel")
-        ax.set_ylabel(r"Surface Brightness (photons/cm$^2$/pixel$^2$/s)")
-        # deprojected EM profile
-        ax2 = ax.twinx()
-        line, = ax2.plot(self.r, self.em, color="black",
-                         linestyle="solid", linewidth=2,
-                         label="EM profile")
-        em_min = min(self.em) / 1.2
-        em_max = max(self.em) * 1.2
-        ax2.set_xlim(r_min, r_max)
-        ax2.set_ylim(em_min, em_max)
-        ax2.set_yscale(ax.get_yscale())
-        ax2.set_ylabel(r"Deprojected Emission Measure (???)")
-        # legend
-        handles = [eb, line]
-        labels = [h.get_label() for h in handles]
-        ax.legend(handles=handles, labels=labels, loc=0)
-        fig.tight_layout()
-        return (fig, ax, ax2)
 
 
 class SBP:
@@ -620,9 +384,6 @@ class SBP:
         flag_fit[:len(self.mask)] = self.mask
         df["flag_fit"] = flag_fit
         df.to_csv(outfile, header=True, index=False)
-
-
-######################################################################
 
 
 class BrightnessProfile:
@@ -928,8 +689,6 @@ def main():
     ax = fig.add_subplot(1, 1, 1)
     sbp.plot(ax=ax, fig=fig)
     fig.savefig(config["sbpexp_image"], dpi=150)
-
-    # TODO: smooth the extrapolated SBP
 
     print("SBP deprojection -> density profile ...")
     redshift = config.as_float("redshift")
