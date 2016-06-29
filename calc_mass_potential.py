@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-06-24
-# Updated: 2016-06-28
+# Updated: 2016-06-29
 #
 # Change logs:
+# 2016-06-29:
+#   * Update "plot()" to support electron number density profile
 # 2016-06-28:
 #   * Implement plot function
 #   * Adjust integration tolerances and progress report
@@ -608,13 +610,22 @@ class DensityProfile:
         self.potential = potential
         return potential
 
-    def plot(self, profile, ax=None, fig=None):
+    def plot(self, profile, with_spline=True, ax=None, fig=None):
         x = self.radius * au.cm.to(au.kpc)
         xlabel = "3D Radius"
         xunit = "kpc"
         xscale = "log"
         yscale = "log"
-        if profile == "mass_gas":
+        x_spl, y_spl = None, None
+        if profile == "electron":
+            x = self.r * au.cm.to(au.kpc)
+            y = self.ne
+            ylabel = "Electron number density"
+            yunit = "cm$^{-3}$"
+            if with_spline:
+                x_spl = self.radius * au.cm.to(au.kpc)
+                y_spl = self.eval_spline(spline="electron", x=self.radius)
+        elif profile == "mass_gas":
             y = self.m_gas * au.g.to(au.solMass)
             ylabel = "Gas mass"
             yunit = "M$_{\odot}$"
@@ -637,9 +648,12 @@ class DensityProfile:
         if ax is None:
             fig, ax = plt.subplots(1, 1)
         ax.plot(x, y, linewidth=2)
+        if with_spline and y_spl is not None:
+            ax.plot(x_spl, y_spl, linewidth=2, linestyle="dashed")
         ax.set_xscale(xscale)
         ax.set_yscale(yscale)
         ax.set_xlim(min(x), max(x))
+        ax.set_ylim(min(y)/1.2, max(y)*1.2)
         ax.set_xlabel(r"%s (%s)" % (xlabel, xunit))
         ax.set_ylabel(r"%s (%s)" % (ylabel, yunit))
         fig.tight_layout()
