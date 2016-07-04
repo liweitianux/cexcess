@@ -6,6 +6,7 @@
 #
 # Change logs:
 # 2016-07-04:
+#   * Use model's "report()" method
 #   * Add config "sbpexp_rcut"
 #   * Rename config "sbpexp_rcut*" to "sbpexp_rignore*"
 #   * Save profile radii in unit "kpc"
@@ -306,15 +307,13 @@ class SBP:
         Report the extrapolation model fitting results.
         """
         results = OrderedDict([
-            ("bkg", self.bkg),
+            ("bkg",            self.bkg),
             ("bkg_subtracted", self.bkg_subtracted),
-            ("rignore", self.rignore),
-            ("rcut", self.rcut),
-            ("model", self.plcmodel.name),
-            ("params", OrderedDict([
-                (pn, [par.value, par.min, par.max, par.vary])
-                for pn, par in self.plcmodel.params.items()
-            ])),
+            ("rignore",        self.rignore),
+            ("rcut",           self.rcut),
+            ("model",          self.plcmodel.name),
+            ("fitting",        self.plcmodel.report(rtype="fitting")),
+            ("params",         self.plcmodel.report(rtype="parameters")),
         ])
         results_json = json.dumps(results, indent=2)
         if outfile is None:
