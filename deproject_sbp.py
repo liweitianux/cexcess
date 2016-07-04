@@ -201,6 +201,8 @@ class SBP:
     bkg = None
     # ignorance/minimal radius from which the SBP is fitted to the PLCModel
     rignore = None
+    # cut radius where the extrapolation stops
+    rcut = None
     # PLCModel instance used to extrapolate the SBP
     plcmodel = None
 
@@ -208,7 +210,7 @@ class SBP:
         self.load_data(r=r, r_err=r_err, s=s, s_err=s_err, rignore=rignore)
         self.plcmodel = PLCModel(scale=True)
 
-    def load_data(self, r, r_err=None, s=None, s_err=None, rcut=None):
+    def load_data(self, r, r_err=None, s=None, s_err=None, rignore=None):
         if r.ndim == 2 and r.shape[1] == 4:
             # 4-column data
             self.r = r[:, 0].copy()
@@ -220,7 +222,7 @@ class SBP:
             self.r_err = np.array(r_err)
             self.s = np.array(s)
             self.s_err = np.array(s_err)
-        self.rcut = rcut
+        self.rignore = rignore
 
     def subtract_bkg(self, bkg):
         """
