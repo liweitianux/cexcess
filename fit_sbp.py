@@ -3,9 +3,12 @@
 #
 # Aaron LI
 # Created: 2016-03-13
-# Updated: 2016-05-06
+# Updated: 2016-07-04
 #
 # Change logs:
+# 2016-07-04:
+#   * Remove unused classes "FitModelSBetaNorm" and "FitModelDBetaNorm"
+#   * Fix minor typo
 # 2016-05-06:
 #   * Get rid of the argument `config_model` of function `make_sbpfit()`
 #   * Add property `long_name` to models
@@ -332,137 +335,6 @@ class FitModelDBeta(FitModel):
                 verticalalignment="top")
 
 
-class FitModelSBetaNorm(FitModel):
-    """
-    The single-beta model to be fitted.
-    Single-beta model, with a constant background.
-    Normalized the `s0' and `bkg' parameters by take the logarithm.
-    """
-    params = lmfit.Parameters()
-    params.add_many(  # (name, value, vary, min, max, expr)
-                    ("log10_s0",   -8.0, True, -12.0, -6.0,  None),
-                    ("rc",   30.0, True, 1.0,   1.0e4, None),
-                    ("beta", 0.7,  True, 0.3,   1.1,   None),
-                    ("log10_bkg",  -9.0, True, -12.0, -7.0,  None))
-
-    @staticmethod
-    def sbeta(r, params):
-        parvals = params.valuesdict()
-        s0 = 10 ** parvals["log10_s0"]
-        rc = parvals["rc"]
-        beta = parvals["beta"]
-        bkg = 10 ** parvals["log10_bkg"]
-        return s0 * np.power((1 + (r/rc)**2), (0.5 - 3*beta)) + bkg
-
-    def __init__(self):
-        super().__init__(name="sbeta_norm",
-                         long_name="Single-beta normalized",
-                         func=self.sbeta, params=self.params)
-
-    def plot(self, params, xdata, ax):
-        """
-        Plot the fitted model, as well as the fitted parameters.
-        """
-        super().plot(params, xdata, ax)
-        ydata = self.sbeta(xdata, params)
-        # fitted paramters
-        ax.vlines(x=params["rc"].value, ymin=min(ydata), ymax=max(ydata),
-                  linestyles="dashed")
-        ax.hlines(y=(10 ** params["bkg"].value), xmin=min(xdata),
-                  xmax=max(xdata), linestyles="dashed")
-        ax.text(x=params["rc"].value, y=min(ydata),
-                s="beta: %.2f\nrc: %.2f" % (params["beta"].value,
-                                            params["rc"].value))
-        ax.text(x=min(xdata), y=min(ydata),
-                s="bkg: %.3e" % (10 ** params["bkg"].value),
-                verticalalignment="top")
-
-
-class FitModelDBetaNorm(FitModel):
-    """
-    The double-beta model to be fitted.
-    Double-beta model, with a constant background.
-    Normalized the `s01', `s02' and `bkg' parameters by take the logarithm.
-
-    NOTE:
-    the first beta component (s01, rc1, beta1) describes the main and
-    outer SBP; while the second beta component (s02, rc2, beta2) accounts
-    for the central brightness excess.
-    """
-    params = lmfit.Parameters()
-    params.add("log10_s01",   value=-8.0, min=-12.0, max=-6.0)
-    params.add("rc1",   value=50.0, min=10.0,  max=1.0e4)
-    params.add("beta1", value=0.7,  min=0.3,   max=1.1)
-    # params.add("df_s0", value=1.0e-8, min=0.0, max=1.0e-6)
-    # params.add("s02",   expr="s01 + df_s0")
-    params.add("log10_s02",   value=-8.0, min=-12.0, max=-6.0)
-    # params.add("df_rc", value=30.0, min=0.0,   max=1.0e4)
-    # params.add("rc2",   expr="rc1 - df_rc")
-    params.add("rc2",   value=20.0, min=1.0,   max=5.0e2)
-    params.add("beta2", value=0.7,  min=0.3,   max=1.1)
-    params.add("log10_bkg",   value=-9.0, min=-12.0, max=-7.0)
-
-    @staticmethod
-    def beta1(r, params):
-        """
-        This beta component describes the main/outer part of the SBP.
-        """
-        parvals = params.valuesdict()
-        s01 = 10 ** parvals["log10_s01"]
-        rc1 = parvals["rc1"]
-        beta1 = parvals["beta1"]
-        bkg = 10 ** parvals["log10_bkg"]
-        return s01 * np.power((1 + (r/rc1)**2), (0.5 - 3*beta1)) + bkg
-
-    @staticmethod
-    def beta2(r, params):
-        """
-        This beta component describes the central/excess part of the SBP.
-        """
-        parvals = params.valuesdict()
-        s02 = 10 ** parvals["log10_s02"]
-        rc2 = parvals["rc2"]
-        beta2 = parvals["beta2"]
-        return s02 * np.power((1 + (r/rc2)**2), (0.5 - 3*beta2))
-
-    @classmethod
-    def dbeta(self, r, params):
-        return self.beta1(r, params) + self.beta2(r, params)
-
-    def __init__(self):
-        super().__init__(name="dbeta_norm",
-                         long_name="Double-beta normalized",
-                         func=self.dbeta, params=self.params)
-
-    def plot(self, params, xdata, ax):
-        """
-        Plot the fitted model, and each beta component,
-        as well as the fitted parameters.
-        """
-        super().plot(params, xdata, ax)
-        beta1_ydata = self.beta1(xdata, params)
-        beta2_ydata = self.beta2(xdata, params)
-        ax.plot(xdata, beta1_ydata, 'b-.')
-        ax.plot(xdata, beta2_ydata, 'b-.')
-        # fitted paramters
-        ydata = beta1_ydata + beta2_ydata
-        ax.vlines(x=params["log10_rc1"].value, ymin=min(ydata),
-                  ymax=max(ydata), linestyles="dashed")
-        ax.vlines(x=params["rc2"].value, ymin=min(ydata), ymax=max(ydata),
-                  linestyles="dashed")
-        ax.hlines(y=(10 ** params["bkg"].value), xmin=min(xdata),
-                  xmax=max(xdata), linestyles="dashed")
-        ax.text(x=params["rc1"].value, y=min(ydata),
-                s="beta1: %.2f\nrc1: %.2f" % (params["beta1"].value,
-                                              params["rc1"].value))
-        ax.text(x=params["rc2"].value, y=min(ydata),
-                s="beta2: %.2f\nrc2: %.2f" % (params["beta2"].value,
-                                              params["rc2"].value))
-        ax.text(x=min(xdata), y=min(ydata),
-                s="bkg: %.3e" % (10 ** params["bkg"].value),
-                verticalalignment="top")
-
-
 class SbpFit:
     """
     Class to handle the SBP fitting with single-/double-beta model.
@@ -703,8 +575,8 @@ class SbpFit:
         self.results.update([
             ("nfev",   fitted.nfev),
             ("ndata",  fitted.ndata),
-            ("nvarys", fitted.nvarys),  # number of varible paramters
-            ("nfree",  fitted.nfree),  # degree of freem
+            ("nvarys", fitted.nvarys),  # number of variable parameters
+            ("nfree",  fitted.nfree),  # degree of freedom
             ("chisqr", fitted.chisqr),
             ("redchi", fitted.redchi),
             ("aic",    fitted.aic),
