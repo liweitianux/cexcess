@@ -2,7 +2,7 @@
 #
 # Aaron LI
 # Created: 2016-06-30
-# Updated: 2016-06-30
+# Updated: 2016-06-31
 #
 
 """
@@ -32,7 +32,7 @@ m_gas_profile = mass_gas_profile.txt
 m_total_profile = mass_total_profile.txt
 
 # number of times w.r.t the critical density
-delta = 500
+delta = 1500, 500, 200
 
 # output results in JSON format
 outfile = overdensity.json
