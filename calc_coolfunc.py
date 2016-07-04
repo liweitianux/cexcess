@@ -4,9 +4,14 @@
 #
 # Aaron LI
 # Created: 2016-06-19
-# Updated: 2016-06-27
+# Updated: 2016-07-04
 #
 # Change logs:
+# 2016-07-04:
+#   * Use "AstroParams"
+#   * Update to use 3-column temperature profile
+#   * Update documentation
+#   * Update sample configuration file
 # 2016-06-27:
 #   * Minor style fixes
 #   * Change 'tprofile' to 't_profile'
@@ -17,10 +22,29 @@ Calculate the *cooling function* profile with respect to the
 given *temperature profile* and the average abundance, redshift,
 and column density nH, using the XSPEC model 'wabs*apec'.
 
+Emission measure:
+    EM = \int n_e n_H dV ~= (n_e^2 / ratio_eH) V  [ cm^-3 ]
+where 'ratio_eH' is the ratio of electron density to proton density (n_H).
+
+APEC normalization returned by XSPEC is simply the *emission measure* of
+the gas scaled by the distance:
+    eta = (\int n_e n_H dV) / (4 pi (D_A (1+z))^2)
+
+The flux calculated with the XSPEC `flux` command has dimension:
+    Flux: [ photon s^-1 cm^-2 ] or [ erg s^-2 cm^-2 ]
+
+If we let EM=1 and then set the APEC's normalization,
+the cooling function is therefore derived by calculating the flux
+using the XSPEC `flux` command, and the cooling function has
+dimension of [ FLUX / EM ].
+
+See also the documentation of `deproject_sbp.py` for more details.
+
+
 Sample configuration file:
 ------------------------------------------------------------
 ## Configuration file for `calc_coolfunc.py`
-## 2016-06-27
+## 2016-07-04
 
 # temperature profile fitted & extrapolated by model: [r, T]
 t_profile = t_profile.txt
@@ -32,10 +56,10 @@ abundance = 0.5
 abund_table = grsa
 
 # redshift of the object
-redshift = 0.0137
+redshift = <REDSHIFT>
 
 # H column density (unit: 10^22 cm^-2)
-nh = 0.03
+nh = <NH>
 
 # energy range within which to calculate the cooling function (unit: keV)
 energy_low = 0.7
@@ -59,6 +83,8 @@ import numpy as np
 import astropy.units as au
 from astropy.cosmology import FlatLambdaCDM
 from configobj import ConfigObj
+
+from astro_params import AstroParams
 
 
 def gen_xspec_script(outfile, data):
@@ -108,10 +134,10 @@ while { [ gets $tpro_fd line ] != -1 } {
         # ignore comment line
         continue
     }
-    scan $line "%%f %%f" radius temp_val
-    #puts "radius: $radius, temperature: $temp_val"
+    scan $line "%%f %%f %%f" radius radius_err temperature
+    #puts "radius: $radius, temperature: $temperature
     # set temperature value
-    newpar 2 $temp_val
+    newpar 2 $temperature
     flux %(energy_low)s %(energy_high)s
     tclout flux 1
     scan $xspec_tclout "%%f %%f %%f %%f" _ _ _ cf_data
@@ -127,16 +153,16 @@ tclexit
     open(outfile, "w").write(xspec_script)
 
 
-def calc_apec_norm(z, H0=71, OmegaM0=0.27):
+def calc_apec_norm(z):
     """
     Calculate the normalization of the APEC model.
 
     Reference:
     https://heasarc.gsfc.nasa.gov/docs/xanadu/xspec/manual/XSmodelApec.html
     """
-    cosmo = FlatLambdaCDM(H0=H0, Om0=OmegaM0)
-    DA_cm = cosmo.angular_diameter_distance(z).to(au.cm).value
-    norm = 1.0e-14 / (4*np.pi * (DA_cm * (1+z))**2)
+    cosmo = FlatLambdaCDM(H0=AstroParams.H0, Om0=AstroParams.OmegaM0)
+    D_A = cosmo.angular_diameter_distance(z).to(au.cm).value
+    norm = 1.0e-14 / (4*np.pi * (D_A * (1+z))**2)
     return norm
 
 
