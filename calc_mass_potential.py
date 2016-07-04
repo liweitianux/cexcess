@@ -2,9 +2,12 @@
 #
 # Aaron LI
 # Created: 2016-06-24
-# Updated: 2016-06-29
+# Updated: 2016-07-04
 #
 # Change logs:
+# 2016-07-04:
+#   * Remove unnecessary configuration options
+#   * Update radii unit to be "kpc", mass unit to be "Msun"
 # 2016-06-29:
 #   * Update "plot()" to support electron number density profile
 # 2016-06-28:
@@ -112,21 +115,14 @@ Sample configuration file:
 ## Configuration for `calc_mass_potential.py`
 ## Date: 2016-06-28
 
-# redshift used for pixel to distance conversion
-redshift = <REDSHIFT>
-
 # electron density profile
 ne_profile = ne_profile.txt
 
 # cooling function profile
 cf_profile = coolfunc_profile.txt
-# unit of the CF profile radius (default: pixel)
-cf_unit = "pixel"
 
 # temperature profile
 t_profile = t_profile.txt
-# unit of the T profile radius (default: pixel)
-t_unit = "pixel"
 
 # number of data points for the output profiles (interpolation)
 num_dp = 1000
@@ -180,8 +176,7 @@ class DensityProfile:
     * gravitational potential profile (cut at the largest available radius)
 
     NOTE:
-    * The radii (of density profile and cooling function profile)
-      should have unit [ cm ]
+    * The radii should have unit [ kpc ]
     * The density should have unit [ cm^-3 ] or [ g cm^-3 ]
     """
     # available splines
@@ -239,21 +234,35 @@ class DensityProfile:
     def load_data(self, data, density_type="electron"):
         if density_type not in self.DENSITY_TYPES:
             raise ValueError("invalid density_types: %s" % density_type)
-        # 3-column density profile: [r, r_err, density]
+        # 3-column density profile: r[kpc], r_err[kpc], density
         self.r = data[:, 0].copy()
         self.r_err = data[:, 1].copy()
         self.d = data[:, 2].copy()
         self.density_type = density_type
 
     def load_cf_profile(self, data):
-        # 2-column cooling function profile: r[cm], cf[flux/EM]
-        self.cf_radius = data[:, 0].copy()
-        self.cf_value = data[:, 1].copy()
+        if data.shape[1] == 2:
+            # 2-column cooling function profile: r[kpc], cf[flux/EM]
+            self.cf_radius = data[:, 0].copy()
+            self.cf_value = data[:, 1].copy()
+        elif data.shape[1] == 3:
+            # 3-column cooling function profile: r[kpc], r_err, cf[flux/EM]
+            self.cf_radius = data[:, 0].copy()
+            self.cf_value = data[:, 2].copy()
+        else:
+            raise ValueError("invalid cooling function profile data")
 
     def load_t_profile(self, data):
-        # 2-column temperature profile: r[cm], T[keV]
-        self.t_radius = data[:, 0].copy()
-        self.t_value = data[:, 1].copy()
+        if data.shape[1] == 2:
+            # 2-column temperature profile: r[kpc], T[keV]
+            self.t_radius = data[:, 0].copy()
+            self.t_value = data[:, 1].copy()
+        elif data.shape[1] == 3:
+            # 3-column temperature profile: r[kpc], r_err[kpc], T[keV]
+            self.t_radius = data[:, 0].copy()
+            self.t_value = data[:, 2].copy()
+        else:
+            raise ValueError("invalid temperature profile data")
 
     def calc_density_electron(self):
         """
@@ -295,8 +304,9 @@ class DensityProfile:
         # flux per unit volume
         cf_new = self.eval_spline(spline="cooling_function", x=self.r)
         flux = cf_new * ne ** 2 / AstroParams.ratio_ne_np
-        # project the 3D flux
-        projector = Projection(rout=self.r+self.r_err)
+        # project the 3D flux into 2D brightness
+        rout = (self.r + self.r_err) * au.kpc.to(au.cm)
+        projector = Projection(rout)
         brightness = projector.project(flux)
         return brightness
 
@@ -503,13 +513,13 @@ class DensityProfile:
         if verbose:
             print("Calculating the gas mass profile (#%d): ..." %
                   len(self.radius), end="", flush=True)
+        c = au.kpc.to(au.cm)**3 * au.g.to(au.solMass)
         for i, r in enumerate(self.radius):
             if verbose and (i+1) % 50 == 0:
                 print("%d..." % (i+1), end="", flush=True)
-            # integrated gas mass [ g ]
-            m_gas[i] = integrate.quad(_f_rho_gas, a=0.0, b=r,
-                                      epsabs=1e-5*au.kpc.to(au.cm),
-                                      epsrel=1e-3)[0]
+            # enclosed gas mass [ Msun ]
+            m_gas[i] = c * integrate.quad(_f_rho_gas, a=0.0, b=r,
+                                          epsrel=1e-3)[0]
         if verbose:
             print("DONE!", flush=True)
         self.m_gas = m_gas
@@ -529,8 +539,8 @@ class DensityProfile:
         #
         # calculate the coefficient of the total mass formula
         # M0 = (k_B * T_gas(r) * r) / (mu * m_atom * G)
-        M0 = ((1.0*au.keV) * (1.0*au.cm) /
-              (AstroParams.mu * ac.u * ac.G)).to(au.g).value
+        M0 = ((1.0*au.keV) * (1.0*au.kpc) /
+              (AstroParams.mu * ac.u * ac.G)).to(au.solMass).value
         m_total = np.zeros(self.radius.shape)
         if verbose:
             print("Calculating the total mass profile (#%d): ..." %
@@ -540,11 +550,11 @@ class DensityProfile:
                 print("%d..." % (i+1), end="", flush=True)
             T = self.eval_spline(spline="temperature", x=r)
             dT_dr = derivative(lambda r: self.eval_spline("temperature", r),
-                               r, dx=0.01*au.kpc.to(au.cm))
+                               r, dx=0.01)
             ne = self.eval_spline(spline="electron", x=r)
             dne_dr = derivative(lambda r: self.eval_spline("electron", r),
-                                r, dx=0.01*au.kpc.to(au.cm))
-            # enclosed total mass [ g ]
+                                r, dx=0.01)
+            # enclosed total mass [ Msun ]
             m_total[i] = - M0 * T * r * (((r / T) * dT_dr) +
                                          ((r / ne) * dne_dr))
         if verbose:
@@ -563,10 +573,12 @@ class DensityProfile:
         if verbose:
             print("Calculating the total mass density profile ...")
         rho_total = np.zeros(self.radius.shape)
+        # unit conversion: Msun/kpc^3 -> g/cm^3
+        c = au.solMass.to(au.g) / au.kpc.to(au.cm)**3
         for i, r in enumerate(self.radius):
             dM_dr = derivative(lambda r: self.eval_spline("mass_total", r),
-                               r, dx=0.01*au.kpc.to(au.cm))
-            rho_total[i] = (dM_dr / (4 * np.pi * r**2))
+                               r, dx=0.01)
+            rho_total[i] = (dM_dr / (4 * np.pi * r**2)) * c
         self.rho_total = rho_total
         return rho_total
 
@@ -595,15 +607,15 @@ class DensityProfile:
             print("Calculating the potential profile (#%d): ..." %
                   len(self.radius), end="", flush=True)
         r_max = max(self.radius)
+        c = - 4 * np.pi * au.kpc.to(au.cm)**2
         for i, r in enumerate(self.radius):
             if verbose and (i+1) % 10 == 0:
                 print("%d..." % (i+1), end="", flush=True)
-            potential[i] = - 4 * np.pi * ac.G.cgs.value * (
+            # total gravitational potential [ cm^2/s^2 ]
+            potential[i] = c * ac.G.cgs.value * (
                 (1/r) * integrate.quad(_int_inner, a=0.0, b=r,
-                                       epsabs=1e-3*au.kpc.to(au.cm),
                                        epsrel=1e-2)[0] +
                 integrate.quad(_int_outer, a=r, b=r_max,
-                               epsabs=1e-3*au.kpc.to(au.cm),
                                epsrel=1e-2)[0])
         if verbose:
             print("DONE!", flush=True)
@@ -611,26 +623,26 @@ class DensityProfile:
         return potential
 
     def plot(self, profile, with_spline=True, ax=None, fig=None):
-        x = self.radius * au.cm.to(au.kpc)
+        x = self.radius
         xlabel = "3D Radius"
         xunit = "kpc"
         xscale = "log"
         yscale = "log"
         x_spl, y_spl = None, None
         if profile == "electron":
-            x = self.r * au.cm.to(au.kpc)
+            x = self.r
             y = self.ne
             ylabel = "Electron number density"
             yunit = "cm$^{-3}$"
             if with_spline:
-                x_spl = self.radius * au.cm.to(au.kpc)
+                x_spl = self.radius
                 y_spl = self.eval_spline(spline="electron", x=self.radius)
         elif profile == "mass_gas":
-            y = self.m_gas * au.g.to(au.solMass)
+            y = self.m_gas
             ylabel = "Gas mass"
             yunit = "M$_{\odot}$"
         elif profile == "mass_total":
-            y = self.m_total * au.g.to(au.solMass)
+            y = self.m_total
             ylabel = "Total mass"
             yunit = "M$_{\odot}$"
         elif profile == "rho_total":
@@ -640,7 +652,7 @@ class DensityProfile:
         elif profile == "potential":
             y = self.potential
             ylabel = "Gravitational potential"
-            yunit = "???"
+            yunit = "cm$^2$/s$^2$"
             yscale = "linear"
         else:
             raise ValueError("unknown profile name: %s" % profile)
@@ -653,7 +665,10 @@ class DensityProfile:
         ax.set_xscale(xscale)
         ax.set_yscale(yscale)
         ax.set_xlim(min(x), max(x))
-        ax.set_ylim(min(y)/1.2, max(y)*1.2)
+        y_min, y_max = min(y), max(y)
+        y_min = y_min/1.2 if y_min > 0 else y_min*1.2
+        y_max = y_max*1.2 if y_max > 0 else y_max/1.2
+        ax.set_ylim(y_min, y_max)
         ax.set_xlabel(r"%s (%s)" % (xlabel, xunit))
         ax.set_ylabel(r"%s (%s)" % (ylabel, yunit))
         fig.tight_layout()
@@ -664,22 +679,22 @@ class DensityProfile:
             data = np.column_stack([self.radius,
                                     self.radius_err,
                                     self.m_gas])
-            header = "radius[cm]  radius_err[cm]  mass_gas(<r)[g]"
+            header = "radius[kpc]  radius_err[kpc]  mass_gas(<r)[Msun]"
         elif profile == "mass_total":
             data = np.column_stack([self.radius,
                                     self.radius_err,
                                     self.m_total])
-            header = "radius[cm]  radius_err[cm]  mass_total(<r)[g]"
+            header = "radius[kpc]  radius_err[kpc]  mass_total(<r)[Msun]"
         elif profile == "rho_total":
             data = np.column_stack([self.radius,
                                     self.radius_err,
                                     self.rho_total])
-            header = "radius[cm]  radius_err[cm]  density_total[g/cm^3]"
+            header = "radius[kpc]  radius_err[kpc]  density_total[g/cm^3]"
         elif profile == "potential":
             data = np.column_stack([self.radius,
                                     self.radius_err,
                                     self.potential])
-            header = "radius[cm]  radius_err[cm]  potential[???]"
+            header = "radius[kpc]  radius_err[kpc]  potential[???]"
         else:
             raise ValueError("unknown profile name: %s" % profile)
         np.savetxt(outfile, data, header=header)
@@ -692,37 +707,11 @@ def main():
                         help="config for mass and potential profiles " +
                              "calculation (default: mass_potential.conf)")
     args = parser.parse_args()
-
     config = ConfigObj(args.config)
 
-    redshift = config.as_float("redshift")
-    pixel = ChandraPixel(z=redshift)
-
     ne_profile = np.loadtxt(config["ne_profile"])
-
     cf_profile = np.loadtxt(config["cf_profile"])
-    cf_unit = "pixel"
-    try:
-        cf_unit = config["cf_unit"]
-    except KeyError:
-        pass
-    if cf_unit == "pixel":
-        conv_factor = pixel.get_length().to(au.cm).value
-    else:
-        conv_factor = au.Unit(cf_unit).to(au.cm)
-    cf_profile[:, 0] *= conv_factor
-
     t_profile = np.loadtxt(config["t_profile"])
-    t_unit = "pixel"
-    try:
-        t_unit = config["t_unit"]
-    except KeyError:
-        pass
-    if t_unit == "pixel":
-        conv_factor = pixel.get_length().to(au.cm).value
-    else:
-        conv_factor = au.Unit(t_unit).to(au.cm)
-    t_profile[:, 0] *= conv_factor
 
     density_profile = DensityProfile(density=ne_profile,
                                      density_type="electron")
