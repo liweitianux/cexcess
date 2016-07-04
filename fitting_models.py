@@ -2,8 +2,14 @@
 #
 # Weitan LI
 # Created: 2016-06-26
-# Updated: 2016-06-26
+# Updated: 2016-07-04
 #
+# Change logs:
+# 2016-07-04:
+#   * Add "report()" method to class "FittingModel"
+#
+
+from collections import OrderedDict
 
 import numpy as np
 import lmfit
@@ -120,6 +126,31 @@ class FittingModel:
             p = lmfit.parameter.Parameters()
             p.loads(params)
             self.params = p
+
+    def report(self, rtype):
+        """
+        Report the fitting results, e.g., g.o.f, chisqr, parameters, etc.
+        """
+        if rtype == "fitting":
+            fitted = self.fitted
+            results = OrderedDict([
+                ("nfev",   fitted.nfev),
+                ("ndata",  fitted.ndata),
+                ("nvarys", fitted.nvarys),  # number of variable parameters
+                ("nfree",  fitted.nfree),  # degree of freedom
+                ("chisqr", fitted.chisqr),
+                ("redchi", fitted.redchi),
+                ("aic",    fitted.aic),
+                ("bic",    fitted.bic),
+            ])
+        elif rtype == "parameters":
+            results = OrderedDict([
+                (pn, [par.value, par.min, par.max, par.vary])
+                for pn, par in self.params.items()
+            ])
+        else:
+            raise ValueError("invalid rtype: %s" % rtype)
+        return results
 
 
 class ABModel(FittingModel):
