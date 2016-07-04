@@ -6,6 +6,8 @@
 #
 # Change logs:
 # 2016-07-04:
+#   * Add config "sbpexp_rcut"
+#   * Rename config "sbpexp_rcut*" to "sbpexp_rignore*"
 #   * Save profile radii in unit "kpc"
 #   * Update to that cooling function profile's radius in unit "kpc"
 # 2016-06-27:
@@ -137,10 +139,12 @@ coolfunc_profile = coolfunc_profile.txt
 redshift = <REDSHIFT>
 
 ## SBP extrapolation
-# cut radius from which the SBP is fitted for extrapolation,
+# ignorance radius from which the SBP is fitted for extrapolation,
 # specified by the ratio w.r.t sbpfit rc (default: 1.2 * rc)
-sbpexp_rcut_ratio = 1.2
-# or directly specify the cut radius (override above rcut ratio)
+sbpexp_rignore_ratio = 1.2
+# or directly specify the ignorance radius (override above) (unit: pixel)
+sbpexp_rignore = <RIGNORE>
+# cut radius to which stop the extrapolation (unit: kpc)
 sbpexp_rcut = <RCUT>
 # output of the extrapolated SBP
 sbpexp_outfile = sbpexp.csv
@@ -194,13 +198,13 @@ class SBP:
     s_err = None
     # uniform background been subtracted
     bkg = None
-    # cut/minimal radius from which the SBP is fitted to the PLCModel
-    rcut = None
+    # ignorance/minimal radius from which the SBP is fitted to the PLCModel
+    rignore = None
     # PLCModel instance used to extrapolate the SBP
     plcmodel = None
 
-    def __init__(self, r, r_err=None, s=None, s_err=None, rcut=None):
-        self.load_data(r=r, r_err=r_err, s=s, s_err=s_err, rcut=rcut)
+    def __init__(self, r, r_err=None, s=None, s_err=None, rignore=None):
+        self.load_data(r=r, r_err=r_err, s=s, s_err=s_err, rignore=rignore)
         self.plcmodel = PLCModel(scale=True)
 
     def load_data(self, r, r_err=None, s=None, s_err=None, rcut=None):
@@ -230,7 +234,7 @@ class SBP:
         self.s -= bkg
         self.bkg_subtracted = True
 
-    def extrapolate(self, rcut=None):
+    def extrapolate(self, rignore=None, rcut=None):
         """
         Extrapolate the SBP by assuming that the outer SBP follows the
         following relation:
@@ -242,6 +246,9 @@ class SBP:
         of magnitude, and the extrapolated SBP bins have the same width
         and relative errors as the last SBP bin observed.
 
+        If the 'rcut' is specified, then the SBP extrapolation stops
+        when exceeds that radius.
+
         Note that the uniform background should be subtracted first.
 
         Return:
@@ -251,9 +258,11 @@ class SBP:
           * self.s_err_extrapolated
           * self.mask_extrapolated
         """
+        if rignore is not None:
+            self.rignore = rignore
         if rcut is not None:
             self.rcut = rcut
-        self.mask = self.r >= self.rcut
+        self.mask = self.r >= self.rignore
         self.plcmodel.load_data(xdata=self.r[self.mask],
                                 ydata=self.s[self.mask],
                                 xerr=self.r_err[self.mask],
@@ -273,7 +282,11 @@ class SBP:
         # do extrapolation
         r_tmp = r_exp[-1] + 2*r_err_exp[-1]
         s_tmp = self.plcmodel.f(r_tmp)
-        while s_tmp > last_s / 10.0:
+        while True:
+            if rcut is not None and r_tmp > rcut:
+                break
+            if rcut is None and (s_tmp < last_s / 10.0):
+                break
             r_exp.append(r_tmp)
             r_err_exp.append(last_r_err)
             s_exp.append(s_tmp)
@@ -295,6 +308,7 @@ class SBP:
         results = OrderedDict([
             ("bkg", self.bkg),
             ("bkg_subtracted", self.bkg_subtracted),
+            ("rignore", self.rignore),
             ("rcut", self.rcut),
             ("model", self.plcmodel.name),
             ("params", OrderedDict([
@@ -680,15 +694,26 @@ def main():
     rc = sbpfit_results["params"]["rc"][0]
     bkg = sbpfit_results["params"]["bkg"][0]
 
+    redshift = config.as_float("redshift")
+    pixel = ChandraPixel(redshift)
+
     print("SBP background subtraction and extrapolation ...")
     sbp = SBP(sbpdata)
-    rcut = rc * config.as_float("sbpexp_rcut_ratio")
+    # ignorance radius
+    rignore = rc * config.as_float("sbpexp_rignore_ratio")
     try:
-        rcut = config.as_float("sbpexp_rcut")
+        rignore = config.as_float("sbpexp_rignore")
     except KeyError:
         pass
+    # cut radius where extrapolation stops (unit: kpc)
+    try:
+        rcut = config.as_float("sbpexp_rcut")
+        # convert unit "kpc" -> "pixel"
+        rcut /= pixel.get_length().to(au.kpc).value
+    except KeyError:
+        rcut = None
     sbp.subtract_bkg(bkg=bkg)
-    sbp.extrapolate(rcut=rcut)
+    sbp.extrapolate(rignore=rignore, rcut=rcut)
     sbp.save(outfile=config["sbpexp_outfile"])
     sbp.report(outfile=config["sbpexp_json"])
     fig = Figure(figsize=(10, 8))
@@ -698,7 +723,6 @@ def main():
     fig.savefig(config["sbpexp_image"], dpi=150)
 
     print("SBP deprojection -> density profile ...")
-    redshift = config.as_float("redshift")
     cf_data = np.loadtxt(config["coolfunc_profile"])
     sbpdata_extrapolated = sbp.get_data()
     brightness_profile = BrightnessProfile(sbp_data=sbpdata_extrapolated,
