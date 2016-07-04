@@ -2,7 +2,12 @@
 #
 # Aaron LI
 # Created: 2016-06-30
-# Updated: 2016-06-31
+# Updated: 2016-07-04
+#
+# Change logs:
+# 2016-07-04:
+#   * Fix a bug with wrong variable
+#   * Update radii to unit "kpc" and mass to unit "Msun"
 #
 
 """
@@ -89,7 +94,7 @@ class MassProfile:
     def load_data(self, data, mass_type="total"):
         if mass_type not in self.MASS_TYPES:
             raise ValueError("invalid mass_types: %s" % mass_type)
-        # 3-column mass profile: [r, r_err, mass]
+        # 3-column mass profile: r[kpc], r_err[kpc], mass[Msun]
         self.r = data[:, 0].copy()
         self.r_err = data[:, 1].copy()
         self.m = data[:, 2].copy()
@@ -113,8 +118,9 @@ class MassProfile:
         cosmo = FlatLambdaCDM(H0=AstroParams.H0, Om0=AstroParams.OmegaM0)
         d_crit = cosmo.critical_density(z).cgs.value  # [ g/cm^3 ]
         for i, r in enumerate(self.r):
-            volume = (4.0/3.0) * np.pi * r**3
-            overdensity[i] = self.m[i] / volume / d_crit
+            volume = (4.0/3.0) * np.pi * (r*au.kpc.to(au.cm))**3
+            mass = self.m[i] * au.solMass.to(au.g)
+            overdensity[i] = mass / volume / d_crit
         self.overdensity = overdensity
         return overdensity
 
@@ -128,8 +134,7 @@ class MassProfile:
             raise ValueError("min(overdensity) > %d" % delta)
         r = optimize.newton(
             lambda x: self.eval_spline("overdensity", x) - delta,
-            x0=500.0*au.kpc.to(au.cm),
-            tol=1e-2*au.kpc.to(au.cm))
+            x0=500.0, tol=1e-2)
         return r
 
     def calc_mass_delta(self, r_delta):
@@ -143,8 +148,8 @@ class MassProfile:
         """
         data = np.column_stack([self.r,
                                 self.r_err,
-                                self.m])
-        header = "radius[cm]  radius_err[cm]  overdensity"
+                                self.overdensity])
+        header = "radius[kpc]  radius_err[kpc]  overdensity"
         np.savetxt(outfile, data, header=header)
 
     def fit_spline(self, spline, log10):
@@ -251,9 +256,9 @@ def main():
         r_delta = m_total_profile.calc_radius_delta(delta=d)
         m_total_delta = m_total_profile.calc_mass_delta(r_delta)
         m_gas_delta = m_gas_profile.calc_mass_delta(r_delta)
-        results["R%d[kpc]" % d] = r_delta * au.cm.to(au.kpc)
-        results["Mtotal%d[Msun]" % d] = m_total_delta * au.g.to(au.solMass)
-        results["Mgas%d[Msun]" % d] = m_gas_delta * au.g.to(au.solMass)
+        results["R%d[kpc]" % d] = r_delta
+        results["Mtotal%d[Msun]" % d] = m_total_delta
+        results["Mgas%d[Msun]" % d] = m_gas_delta
 
     results_json = json.dumps(results, indent=2)
     print(results_json)
