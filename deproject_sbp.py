@@ -2,9 +2,12 @@
 #
 # Aaron LI
 # Created: 2016-06-10
-# Updated: 2016-06-27
+# Updated: 2016-07-04
 #
 # Change logs:
+# 2016-07-04:
+#   * Save profile radii in unit "kpc"
+#   * Update to that cooling function profile's radius in unit "kpc"
 # 2016-06-27:
 #   * Minor cleanups
 #   * Remove obsolete class "DeprojectSBP"
@@ -445,17 +448,21 @@ class BrightnessProfile:
 
     def convert_units(self):
         """
-        Convert the units of input data:
+        Convert the units of SBP:
            radius: pixel -> cm
            brightness: Flux / pixel**2 -> Flux / cm**2
+
+        Convert the units of cooling function profile:
+            radius: kpc -> cm
         """
         if not self.units_converted:
             cm_per_pixel = self.pixel.get_length().to(au.cm).value
             self.r *= cm_per_pixel
             self.r_err *= cm_per_pixel
-            self.cf_radius *= cm_per_pixel
             self.s /= cm_per_pixel**2
             self.s_err /= cm_per_pixel**2
+            # cooling function profile: kpc -> cm
+            self.cf_radius *= au.kpc.to(au.cm)
             self.units_converted = True
 
     def get_radius(self):
@@ -573,16 +580,16 @@ class BrightnessProfile:
 
     def save(self, density_type, outfile):
         if density_type == "electron":
-            data = np.column_stack([self.r,
-                                    self.r_err,
+            data = np.column_stack([self.r * au.cm.to(au.kpc),
+                                    self.r_err * au.cm.to(au.kpc),
                                     self.ne])
-            header = "radius[cm]  radius_err[cm]  " + \
+            header = "radius[kpc]  radius_err[kpc]  " + \
                      "electron_number_density[cm^-3]"
         elif density_type == "gas":
-            data = np.column_stack([self.r,
-                                    self.r_err,
+            data = np.column_stack([self.r * au.cm.to(au.kpc),
+                                    self.r_err * au.cm.to(au.kpc),
                                     self.rho_gas])
-            header = "radius[cm]  radius_err[cm]  " + \
+            header = "radius[kpc]  radius_err[kpc]  " + \
                      "gas_mass_density[g/cm^3]"
         else:
             raise ValueError("unknown density_type: %s" % density_type)
