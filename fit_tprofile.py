@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 #
-# Weitian LI
-# 2016-07-04
+# Aaron LI
+# Created: 2016-07-04
+# Updated: 2016-07-04
+#
+# Change logs:
+# 2016-07-04:
+#   * Set default "rcut=3000" for TemperatureProfile.extrapolate()
 #
 
 """
@@ -25,7 +30,7 @@ redshift = <REDSHIFT>
 t_profile_data = t_profile_data.txt
 
 # cut radius to which stop the extrapolation (unit: kpc)
-rcut_extrap = <RCUT>
+rcut_extrap = 3000
 
 # number of data points for the output temperature profile
 num_dp = 1000
@@ -155,7 +160,7 @@ class TemperatureProfile:
                              xerr=self.r_err, yerr=self.t_err)
         self.model.fit()
 
-    def extrapolate(self, rcut, num=1000):
+    def extrapolate(self, rcut=3000, num=1000):
         """
         Interpolate and extrapolate the fitted temperature profile.
 
