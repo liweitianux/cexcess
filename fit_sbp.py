@@ -63,8 +63,11 @@ or the double-beta model:
          s02 * [1.0 + (r/rc2)^2] ^ (0.5-3*beta2) + bkg
 
 
-Sample config file:
+Sample configuration file:
 -------------------------------------------------
+## Configuration for `fit_sbp.py`
+## Date: 2016-05-06
+
 name     = <NAME>
 obsid    = <OBSID>
 r500_pix = <R500_PIX>

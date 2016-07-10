@@ -50,7 +50,7 @@ Sample configuration file:
 t_profile = t_profile.txt
 
 # average abundance (unit: solar)
-abundance = 0.5
+abundance = <ABUND>
 
 # abundance table (default: grsa)
 abund_table = grsa
