@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-06-24
-# Updated: 2016-07-04
+# Updated: 2016-07-10
 #
 # Change logs:
+# 2016-07-10:
+#   * Use class 'SmoothSpline' from module 'spline.py'
 # 2016-07-04:
 #   * Remove unnecessary configuration options
 #   * Update radii unit to be "kpc", mass unit to be "Msun"
@@ -212,21 +214,12 @@ class DensityProfile:
     potential = None
     # fitted spline to the profiles
     d_spline = None
-    d_spline_log10 = None
     ne_spline = None
-    ne_spline_log10 = None
     rho_gas_spline = None
-    rho_gas_spline_log10 = None
     cf_spline = None
-    cf_spline_log10 = None
     t_spline = None
-    t_spline_log10 = None
     m_total_spline = None
-    m_total_spline_log10 = None
     rho_total_spline = None
-    rho_total_spline_log10 = None
-    # call R through `rpy2`
-    mgcv = importr("mgcv")
 
     def __init__(self, density, density_type="electron"):
         self.load_data(data=density, density_type=density_type)
@@ -274,7 +267,7 @@ class DensityProfile:
         elif self.density_type == "gas":
             self.ne = self.d / AstroParams.m_atom / AstroParams.mu_e
         # fit a smoothing spline
-        self.fit_spline(spline="electron", log10=True)
+        self.fit_spline(spline="electron", log10=["x", "y"])
         return self.ne
 
     def calc_density_gas(self):
@@ -287,7 +280,7 @@ class DensityProfile:
         elif self.density_type == "gas":
             self.rho_gas = self.d.copy()
         # fit a smoothing spline
-        self.fit_spline(spline="rho_gas", log10=True)
+        self.fit_spline(spline="rho_gas", log10=["x", "y"])
         return self.rho_gas
 
     def calc_brightness(self):
@@ -298,7 +291,7 @@ class DensityProfile:
         if self.cf_radius is None or self.cf_value is None:
             raise ValueError("cooling function profile missing")
         if self.cf_spline is None:
-            self.fit_spline(spline="cooling_function", log10=False)
+            self.fit_spline(spline="cooling_function", log10=[])
         #
         ne = self.calc_density_electron()
         # flux per unit volume
@@ -310,119 +303,49 @@ class DensityProfile:
         brightness = projector.project(flux)
         return brightness
 
-    def fit_spline(self, spline, log10):
-        """
-        Fit a smoothing line to the specified spline data,
-        by utilizing the R `mgcv::gam()` function.
-
-        If 'log10' is True, the input data are first applied the log-scale
-        transform, and then fitted by the smoothing spline.
-
-        The fitted spline allows extrapolation.
-        """
+    def fit_spline(self, spline, log10=[]):
         if spline not in self.SPLINES:
             raise ValueError("invalid spline: %s" % spline)
         #
         if spline == "density":
             # given density profile (either electron / gas mass density)
-            if log10:
-                x = ro.FloatVector(np.log10(self.r))
-                y = ro.FloatVector(np.log10(self.d))
-                self.d_spline_log10 = True
-            else:
-                x = ro.FloatVector(self.r)
-                y = ro.FloatVector(self.s)
-                self.d_spline_log10 = False
-            self.d_spline = self.mgcv.gam(
-                ro.Formula("y ~ s(x, bs='ps')"),
-                data=ro.DataFrame({"x": x, "y": y}),
-                method="REML")
+            x = self.r
+            y = self.d
+            spl = "d_spline"
         elif spline == "electron":
             # input electron number density profile
-            if log10:
-                x = ro.FloatVector(np.log10(self.r))
-                y = ro.FloatVector(np.log10(self.ne))
-                self.ne_spline_log10 = True
-            else:
-                x = ro.FloatVector(self.r)
-                y = ro.FloatVector(self.ne)
-                self.ne_spline_log10 = False
-            self.ne_spline = self.mgcv.gam(
-                ro.Formula("y ~ s(x, bs='ps')"),
-                data=ro.DataFrame({"x": x, "y": y}),
-                method="REML")
+            x = self.r
+            y = self.ne
+            spl = "ne_spline"
         elif spline == "rho_gas":
             # input gas mass density profile
-            if log10:
-                x = ro.FloatVector(np.log10(self.r))
-                y = ro.FloatVector(np.log10(self.rho_gas))
-                self.rho_gas_spline_log10 = True
-            else:
-                x = ro.FloatVector(self.r)
-                y = ro.FloatVector(self.rho_gas)
-                self.rho_gas_spline_log10 = False
-            self.rho_gas_spline = self.mgcv.gam(
-                ro.Formula("y ~ s(x, bs='ps')"),
-                data=ro.DataFrame({"x": x, "y": y}),
-                method="REML")
+            x = self.r
+            y = self.rho_gas
+            spl = "rho_gas_spline"
         elif spline == "cooling_function":
             # input cooling function profile
-            if log10:
-                x = ro.FloatVector(np.log10(self.cf_radius))
-                y = ro.FloatVector(np.log10(self.cf_value))
-                self.cf_spline_log10 = True
-            else:
-                x = ro.FloatVector(self.cf_radius)
-                y = ro.FloatVector(self.cf_value)
-                self.cf_spline_log10 = False
-            self.cf_spline = self.mgcv.gam(
-                ro.Formula("y ~ s(x, bs='ps')"),
-                data=ro.DataFrame({"x": x, "y": y}),
-                method="REML")
+            x = self.cf_radius
+            y = self.cf_value
+            spl = "cf_spline"
         elif spline == "temperature":
             # input temperature profile
-            if log10:
-                x = ro.FloatVector(np.log10(self.t_radius))
-                y = ro.FloatVector(np.log10(self.t_value))
-                self.t_spline_log10 = True
-            else:
-                x = ro.FloatVector(self.t_radius)
-                y = ro.FloatVector(self.t_value)
-                self.t_spline_log10 = False
-            self.t_spline = self.mgcv.gam(
-                ro.Formula("y ~ s(x, bs='ps')"),
-                data=ro.DataFrame({"x": x, "y": y}),
-                method="REML")
+            x = self.t_radius
+            y = self.t_value
+            spl = "t_spline"
         elif spline == "mass_total":
             # calculated total/gravitational mass profile
-            if log10:
-                x = ro.FloatVector(np.log10(self.radius))
-                y = ro.FloatVector(np.log10(self.m_total))
-                self.m_total_spline_log10 = True
-            else:
-                x = ro.FloatVector(self.radius)
-                y = ro.FloatVector(self.m_total)
-                self.m_total_spline_log10 = False
-            self.m_total_spline = self.mgcv.gam(
-                ro.Formula("y ~ s(x, bs='ps')"),
-                data=ro.DataFrame({"x": x, "y": y}),
-                method="REML")
+            x = self.radius
+            y = self.m_total
+            spl = "m_total_spline"
         elif spline == "rho_total":
             # calculated total mass density profile
-            if log10:
-                x = ro.FloatVector(np.log10(self.radius))
-                y = ro.FloatVector(np.log10(self.rho_total))
-                self.rho_total_spline_log10 = True
-            else:
-                x = ro.FloatVector(self.radius)
-                y = ro.FloatVector(self.rho_total)
-                self.rho_total_spline_log10 = False
-            self.rho_total_spline = self.mgcv.gam(
-                ro.Formula("y ~ s(x, bs='ps')"),
-                data=ro.DataFrame({"x": x, "y": y}),
-                method="REML")
+            x = self.radius
+            y = self.rho_total
+            spl = "rho_total_spline"
         else:
             raise ValueError("invalid spline: %s" % spline)
+        setattr(self, spl, SmoothSpline(x=x, y=y))
+        getattr(self, spl).fit(log10=log10)
 
     def eval_spline(self, spline, x):
         """
@@ -430,46 +353,23 @@ class DensityProfile:
         Also check whether the spline was fitted in the log-scale space,
         and transform the evaluated values if necessary.
         """
-        x = np.array(x)
-        if x.shape == ():
-            x = x.reshape((1,))
         if spline == "density":
             spl = self.d_spline
-            log10 = self.d_spline_log10
         elif spline == "electron":
             spl = self.ne_spline
-            log10 = self.ne_spline_log10
         elif spline == "rho_gas":
             spl = self.rho_gas_spline
-            log10 = self.rho_gas_spline_log10
         elif spline == "cooling_function":
             spl = self.cf_spline
-            log10 = self.cf_spline_log10
         elif spline == "temperature":
             spl = self.t_spline
-            log10 = self.t_spline_log10
         elif spline == "mass_total":
             spl = self.m_total_spline
-            log10 = self.m_total_spline_log10
         elif spline == "rho_total":
             spl = self.rho_total_spline
-            log10 = self.rho_total_spline_log10
         else:
             raise ValueError("invalid spline: %s" % spline)
-        #
-        if log10:
-            x_new = ro.ListVector({"x": ro.FloatVector(np.log10(x))})
-            y_pred = self.mgcv.predict_gam(spl, newdata=x_new)
-            y_pred = 10 ** np.array(y_pred)
-        else:
-            x_new = ro.ListVector({"x": ro.FloatVector(x)})
-            y_pred = self.mgcv.predict_gam(spl, newdata=x_new)
-            y_pred = np.array(y_pred)
-        #
-        if len(y_pred) == 1:
-            return y_pred[0]
-        else:
-            return y_pred
+        return spl.eval(x)
 
     def gen_radius(self, num=1000):
         """
@@ -535,7 +435,7 @@ class DensityProfile:
         if self.t_radius is None or self.t_value is None:
             raise ValueError("temperature profile required")
         if self.t_spline is None:
-            self.fit_spline(spline="temperature", log10=False)
+            self.fit_spline(spline="temperature", log10=[])
         #
         # calculate the coefficient of the total mass formula
         # M0 = (k_B * T_gas(r) * r) / (mu * m_atom * G)
@@ -568,7 +468,7 @@ class DensityProfile:
         calculate the following gravitational potential profile.
         """
         if self.m_total_spline is None:
-            self.fit_spline(spline="mass_total", log10=True)
+            self.fit_spline(spline="mass_total", log10=["x", "y"])
         #
         if verbose:
             print("Calculating the total mass density profile ...")
@@ -601,7 +501,7 @@ class DensityProfile:
         if self.rho_total is None:
             self.calc_density_total(verbose=verbose)
         if self.rho_total_spline is None:
-            self.fit_spline(spline="rho_total", log10=True)
+            self.fit_spline(spline="rho_total", log10=["x", "y"])
         potential = np.zeros(self.radius.shape)
         if verbose:
             print("Calculating the potential profile (#%d): ..." %
