@@ -159,11 +159,9 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-import rpy2.robjects as ro
-from rpy2.robjects.packages import importr
-
 from astro_params import AstroParams, ChandraPixel
 from projection import Projection
+from spline import SmoothSpline
 
 plt.style.use("ggplot")
 
