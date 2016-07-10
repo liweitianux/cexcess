@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-06-10
-# Updated: 2016-07-04
+# Updated: 2016-07-10
 #
 # Change logs:
+# 2016-07-10:
+#   * Use class 'SmoothSpline' from module
 # 2016-07-04:
 #   * Use model's "report()" method
 #   * Add config "sbpexp_rcut"
@@ -176,12 +178,10 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from configobj import ConfigObj
 
-import rpy2.robjects as ro
-from rpy2.robjects.packages import importr
-
 from astro_params import AstroParams, ChandraPixel
 from projection import Projection
 from fitting_models import PLCModel
+from spline import SmoothSpline
 
 plt.style.use("ggplot")
 
@@ -436,12 +436,8 @@ class BrightnessProfile:
     rho_gas = None
     # fitted smoothing spline to the SBP
     s_spline = None
-    s_spline_log10 = None
     # fitted smoothing spline to the cooling function profile
     cf_spline = None
-    cf_spline_log10 = None
-    # call R through `rpy2`
-    mgcv = importr("mgcv")
 
     def __init__(self, sbp_data, cf_data, z):
         self.load_data(data=sbp_data)
@@ -483,47 +479,22 @@ class BrightnessProfile:
     def get_radius(self):
         return (self.r.copy(), self.r_err.copy())
 
-    def fit_spline(self, spline, log10=True):
-        """
-        Fit a smoothing line to the specified spline data,
-        by calling the R `mgcv::gam()` function.
-
-        If 'log10' is True, the input data are first applied the log-scale
-        transform, and then fitted by the smoothing spline.
-
-        The fitted spline allows extrapolation.
-        """
+    def fit_spline(self, spline, log10=[]):
         if spline not in self.SPLINES:
             raise ValueError("invalid spline: %s" % spline)
         #
         if spline == "brightness":
-            if log10:
-                x = ro.FloatVector(np.log10(self.r))
-                y = ro.FloatVector(np.log10(self.s))
-                self.s_spline_log10 = True
-            else:
-                x = ro.FloatVector(self.r)
-                y = ro.FloatVector(self.s)
-                self.s_spline_log10 = False
-            weights = ro.FloatVector(self.s / self.s_err)
-            self.s_spline = self.mgcv.gam(
-                ro.Formula("y ~ s(x, bs='ps')"),
-                weights=weights,
-                data=ro.DataFrame({"x": x, "y": y}),
-                method="REML")
+            x = self.r
+            y = self.s
+            weights = self.s / self.s_err
+            spl = "s_spline"
         elif spline == "cooling_function":
-            if log10:
-                x = ro.FloatVector(np.log10(self.cf_radius))
-                y = ro.FloatVector(np.log10(self.cf_value))
-                self.cf_spline_log10 = True
-            else:
-                x = ro.FloatVector(self.cf_radius)
-                y = ro.FloatVector(self.cf_value)
-                self.cf_spline_log10 = False
-            self.cf_spline = self.mgcv.gam(
-                ro.Formula("y ~ s(x, bs='ps')"),
-                data=ro.DataFrame({"x": x, "y": y}),
-                method="REML")
+            x = self.cf_radius
+            y = self.cf_value
+            weights = None
+            spl = "cf_spline"
+        setattr(self, spl, SmoothSpline(x=x, y=y, weights=weights))
+        getattr(self, spl).fit(log10=log10)
 
     def eval_spline(self, spline, x):
         """
@@ -531,31 +502,13 @@ class BrightnessProfile:
         Also check whether the spline was fitted in the log-scale space,
         and transform the evaluated values if necessary.
         """
-        x = np.array(x)
-        if x.shape == ():
-            x = x.reshape((1,))
         if spline == "brightness":
             spl = self.s_spline
-            log10 = self.s_spline_log10
         elif spline == "cooling_function":
             spl = self.cf_spline
-            log10 = self.cf_spline_log10
         else:
             raise ValueError("invalid spline: %s" % spline)
-        #
-        if log10:
-            x_new = ro.ListVector({"x": ro.FloatVector(np.log10(x))})
-            y_pred = self.mgcv.predict_gam(spl, newdata=x_new)
-            y_pred = 10 ** np.array(y_pred)
-        else:
-            x_new = ro.ListVector({"x": ro.FloatVector(x)})
-            y_pred = self.mgcv.predict_gam(spl, newdata=x_new)
-            y_pred = np.array(y_pred)
-        #
-        if len(y_pred) == 1:
-            return y_pred[0]
-        else:
-            return y_pred
+        return spl.eval(x)
 
     def calc_electron_density(self):
         """
@@ -566,9 +519,9 @@ class BrightnessProfile:
         unit: [ cm^-3 ] if the units converted for input data
         """
         if self.s_spline is None:
-            self.fit_spline(spline="brightness", log10=True)
+            self.fit_spline(spline="brightness", log10=["x", "y"])
         if self.cf_spline is None:
-            self.fit_spline(spline="cooling_function", log10=False)
+            self.fit_spline(spline="cooling_function", log10=[])
         #
         s_new = self.eval_spline(spline="brightness", x=self.r)
         cf_new = self.eval_spline(spline="cooling_function", x=self.r)
