@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-07-04
-# Updated: 2016-07-04
+# Updated: 2016-07-11
 #
 # Change logs:
+# 2016-07-11:
+#   * Use a default config to allow a minimal user config
 # 2016-07-04:
 #   * Set default "rcut=3000" for TemperatureProfile.extrapolate()
 #
@@ -16,15 +18,31 @@ temperature profile model, i.e., the *wang2012* model:
 
 With the fitted temperature profile model, we can interpolate and
 extrapolate the temperature profile for later mass profile calculation.
+"""
 
 
-Sample configuration file:
-------------------------------------------------------------
+import argparse
+import json
+from collections import OrderedDict
+
+import numpy as np
+import astropy.units as au
+import lmfit
+from configobj import ConfigObj
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+
+from fitting_models import FittingModel
+from astro_params import ChandraPixel
+
+plt.style.use("ggplot")
+
+config_default = """
 ## Configuration for `fit_tprofile.py`
-## Date: 2016-07-04
 
 # redshift of the object (for pixel to distance conversion)
-redshift = <REDSHIFT>
+redshift = -1
 
 # input temperature profile data file
 t_profile_data = t_profile_data.txt
@@ -52,25 +70,7 @@ t_profile_image = t_profile.png
   #beta = 0.5,  0.1, 1.0, FIXED
   beta = 0.5,  0.1, 1.0
   T0   = 2.0,  1.0, 5.0
-------------------------------------------------------------
 """
-
-import argparse
-import json
-from collections import OrderedDict
-
-import numpy as np
-import astropy.units as au
-import lmfit
-from configobj import ConfigObj
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from matplotlib.figure import Figure
-
-from fitting_models import FittingModel
-from astro_params import ChandraPixel
-
-plt.style.use("ggplot")
 
 
 class Wang2012Model(FittingModel):
@@ -221,7 +221,10 @@ def main():
     parser.add_argument("config", nargs="?", default="tprofile.conf",
                         help="configuration (default: tprofile.conf")
     args = parser.parse_args()
-    config = ConfigObj(args.config)
+
+    config = ConfigObj(config_default.splitlines())
+    config_user = ConfigObj(args.config)
+    config.merge(config_user)
 
     tprofile_data = np.loadtxt(config["t_profile_data"])
     redshift = config.as_float("redshift")
