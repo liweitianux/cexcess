@@ -6,6 +6,7 @@
 #
 # Change logs:
 # 2016-07-10:
+#   * Allow disable the calculation of potential profile
 #   * Use class 'SmoothSpline' from module 'spline.py'
 # 2016-07-04:
 #   * Remove unnecessary configuration options
@@ -142,6 +143,7 @@ rho_total_profile = rho_total_profile.txt
 rho_total_profile_image = rho_total_profile.png
 
 # output gravitational potential profile
+# NOTE: to disable potential calculation, do not specified the output files
 potential_profile = potential_profile.txt
 potential_profile_image = potential_profile.png
 ------------------------------------------------------------
@@ -646,14 +648,16 @@ def main():
     density_profile.plot(profile="rho_total", ax=ax, fig=fig)
     fig.savefig(config["rho_total_profile_image"], dpi=150)
 
-    density_profile.calc_potential(verbose=True)
-    density_profile.save(profile="potential",
-                         outfile=config["potential_profile"])
-    fig = Figure(figsize=(10, 8))
-    FigureCanvas(fig)
-    ax = fig.add_subplot(1, 1, 1)
-    density_profile.plot(profile="potential", ax=ax, fig=fig)
-    fig.savefig(config["potential_profile_image"], dpi=150)
+    outfile_potential = config["potential_profile"]
+    if outfile_potential != "":
+        density_profile.calc_potential(verbose=True)
+        density_profile.save(profile="potential",
+                             outfile=outfile_potential)
+        fig = Figure(figsize=(10, 8))
+        FigureCanvas(fig)
+        ax = fig.add_subplot(1, 1, 1)
+        density_profile.plot(profile="potential", ax=ax, fig=fig)
+        fig.savefig(config["potential_profile_image"], dpi=150)
 
 
 if __name__ == "__main__":
