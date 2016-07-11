@@ -5,6 +5,7 @@
 #
 # Change logs:
 # 2016-07-11:
+#   * Add functions "get_redshift()" and "get_nh()"
 #   * Add function "get_owner()"
 #
 
@@ -82,3 +83,24 @@ def get_r500(info):
             "kpc_per_pix": kpc_per_pix,
     }
     return results
+
+
+def get_redshift(info):
+    """
+    Get the redshift from the info json file.
+    """
+    info = load_info(info)
+    redshift = float(info["redshift"])
+    return redshift
+
+
+def get_nh(info):
+    """
+    Get the column density (nH) from the info json file.
+    """
+    info = load_info(info)
+    if get_owner(info) == "LWT":
+        nh = float(info["nH (10^22 cm^-2)"])
+    else:
+        nh = float(info["nH"])
+    return nh
