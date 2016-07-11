@@ -608,8 +608,8 @@ def main():
     args = parser.parse_args()
 
     config = ConfigObj(config_default.splitlines())
-    if args.config != "":
-        config_user = ConfigObj(args.config)
+    if args.config is not None:
+        config_user = ConfigObj(open(args.config))
         config.merge(config_user)
 
     ne_profile = np.loadtxt(config["ne_profile"])
