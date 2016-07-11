@@ -1,7 +1,11 @@
 #
 # Aaron LI
 # Created: 2016-05-04
-# Updated: 2016-05-04
+# Updated: 2016-07-11
+#
+# Change logs:
+# 2016-07-11:
+#   * Add function "get_owner()"
 #
 
 """
@@ -24,6 +28,21 @@ def load_info(info):
         return info
 
 
+def get_owner(info):
+    """
+    Determine the owner of the info: 'LWT' or 'ZZH'.
+
+    Return:
+    * 'LWT'
+    * 'ZZH'
+    """
+    info = load_info(info)
+    if "IN_SAMPLE" in info.keys():
+        return "ZZH"
+    else:
+        return "LWT"
+
+
 def get_r500(info):
     """
     Get the R500 value (in unit pixel and kpc), as well as its errors.
@@ -36,13 +55,11 @@ def get_r500(info):
     """
     info = load_info(info)
 
-    if "IN_SAMPLE" in info.keys():
-        # ZZH's INFO
+    if get_owner(info) == "ZZH":
         r500_kpc = float(info["R500"])
         r500EL_kpc = float(info["R500_err_lower"])
         r500EU_kpc = float(info["R500_err_upper"])
     else:
-        # LWT's INFO
         r500_kpc = float(info["R500 (kpc)"])
         r500EL_kpc = float(info["R500_err_lower (1sigma)"])
         r500EU_kpc = float(info["R500_err_upper (1sigma)"])
