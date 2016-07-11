@@ -4,9 +4,11 @@
 #
 # Aaron LI
 # Created: 2016-06-19
-# Updated: 2016-07-04
+# Updated: 2016-07-11
 #
 # Change logs:
+# 2016-07-11:
+#   * Use a default config to allow a minimal user config
 # 2016-07-04:
 #   * Use "AstroParams"
 #   * Update to use 3-column temperature profile
@@ -39,39 +41,8 @@ using the XSPEC `flux` command, and the cooling function has
 dimension of [ FLUX / EM ].
 
 See also the documentation of `deproject_sbp.py` for more details.
-
-
-Sample configuration file:
-------------------------------------------------------------
-## Configuration file for `calc_coolfunc.py`
-## 2016-07-04
-
-# temperature profile fitted & extrapolated by model: [r, T]
-t_profile = t_profile.txt
-
-# average abundance (unit: solar)
-abundance = <ABUND>
-
-# abundance table (default: grsa)
-abund_table = grsa
-
-# redshift of the object
-redshift = <REDSHIFT>
-
-# H column density (unit: 10^22 cm^-2)
-nh = <NH>
-
-# energy range within which to calculate the cooling function (unit: keV)
-energy_low = 0.7
-energy_high = 7.0
-
-# output file of the XSPEC script for cooling function calculation
-xspec_script = coolfunc.xcm
-
-# output file of the cooling function profile: [r, CF]
-coolfunc = coolfunc_profile.txt
-------------------------------------------------------------
 """
+
 
 import argparse
 import subprocess
@@ -85,6 +56,36 @@ from astropy.cosmology import FlatLambdaCDM
 from configobj import ConfigObj
 
 from astro_params import AstroParams
+
+
+config_default = """
+## Configuration file for `calc_coolfunc.py`
+
+# temperature profile fitted & extrapolated by model: [r, T]
+t_profile = t_profile.txt
+
+# average abundance (unit: solar)
+abundance = -1
+
+# abundance table (default: grsa)
+abund_table = grsa
+
+# redshift of the object
+redshift = -1
+
+# H column density (unit: 10^22 cm^-2)
+nh = -1
+
+# energy range within which to calculate the cooling function (unit: keV)
+energy_low = 0.7
+energy_high = 7.0
+
+# output file of the XSPEC script for cooling function calculation
+xspec_script = coolfunc.xcm
+
+# output file of the cooling function profile: [r, CF]
+coolfunc = coolfunc_profile.txt
+"""
 
 
 def gen_xspec_script(outfile, data):
@@ -181,7 +182,10 @@ def main():
                         help="config for cooling function calculation " +
                              "(default: coolfunc.conf)")
     args = parser.parse_args()
-    config = ConfigObj(args.config)
+
+    config = ConfigObj(config_default.splitlines())
+    config_user = ConfigObj(args.config)
+    config.merge(config_user)
 
     redshift = config.as_float("redshift")
     config_data = {
