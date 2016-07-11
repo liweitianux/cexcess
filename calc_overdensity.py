@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-06-30
-# Updated: 2016-07-04
+# Updated: 2016-07-11
 #
 # Change logs:
+# 2016-07-11:
+#   * Use a default config to allow a minimal user config
 # 2016-07-04:
 #   * Fix a bug with wrong variable
 #   * Update radii to unit "kpc" and mass to unit "Msun"
@@ -20,32 +22,8 @@ R_{500}).
 
 References:
 [1] Ettori et al., 2013, Space Science Review, 177, 119-154
-
-
-Sample configuration file:
-------------------------------------------------------------
-## Configuration for `calc_overdensity.py`
-## Date: 2016-06-30
-
-# redshift of the source (critical density)
-redshift = <REDSHIFT>
-
-# gas mass profile
-m_gas_profile = mass_gas_profile.txt
-
-# output total (gravitational) mass profile
-m_total_profile = mass_total_profile.txt
-
-# number of times w.r.t the critical density
-delta = 1500, 500, 200
-
-# output results in JSON format
-outfile = overdensity.json
-
-# output overdensity profile
-overdensity_profile = overdensity_profile.txt
-------------------------------------------------------------
 """
+
 
 import argparse
 import json
@@ -61,6 +39,29 @@ import rpy2.robjects as ro
 from rpy2.robjects.packages import importr
 
 from astro_params import AstroParams
+
+
+config_default = """
+## Configuration for `calc_overdensity.py`
+
+# redshift of the source (critical density)
+#redshift = <REDSHIFT>
+
+# gas mass profile
+m_gas_profile = mass_gas_profile.txt
+
+# output total (gravitational) mass profile
+m_total_profile = mass_total_profile.txt
+
+# number of times w.r.t the critical density
+delta = 1500, 500, 200
+
+# output results in JSON format
+outfile = overdensity.json
+
+# output overdensity profile
+overdensity_profile = overdensity_profile.txt
+"""
 
 
 class MassProfile:
@@ -237,7 +238,10 @@ def main():
                              "etc. calculation (default: overdensity.conf)")
     args = parser.parse_args()
 
-    config = ConfigObj(args.config)
+    config = ConfigObj(config_default.splitlines())
+    config_user = ConfigObj(args.config)
+    config.merge(config_user)
+
     redshift = config.as_float("redshift")
     m_gas_data = np.loadtxt(config["m_gas_profile"])
     m_total_data = np.loadtxt(config["m_total_profile"])
