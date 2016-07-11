@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-06-10
-# Updated: 2016-07-10
+# Updated: 2016-07-11
 #
 # Change logs:
+# 2016-07-11:
+#   * Use a default config to allow a minimal user config
 # 2016-07-10:
 #   * Use class 'SmoothSpline' from module
 # 2016-07-04:
@@ -125,45 +127,6 @@ References:
 [5] AtomDB / APEC model:
     * http://www.atomdb.org/faq.php#DensityXSPECnorm
     * https://heasarc.gsfc.nasa.gov/docs/xanadu/xspec/manual/XSmodelApec.html
-
-
-Sample configuration file:
-------------------------------------------------------------
-## Configuration for `deproject_sbp.py`
-## Date: 2016-06-23
-
-# config file for SBP fitting (e.g., sbpfit.conf)
-sbpfit_config = sbpfit.conf
-
-# input cooling function profile
-coolfunc_profile = coolfunc_profile.txt
-
-# redshift of the object (for pixel to distance conversion)
-redshift = <REDSHIFT>
-
-## SBP extrapolation
-# ignorance radius from which the SBP is fitted for extrapolation,
-# specified by the ratio w.r.t sbpfit rc (default: 1.2 * rc)
-sbpexp_rignore_ratio = 1.2
-# or directly specify the ignorance radius (override above) (unit: pixel)
-sbpexp_rignore = <RIGNORE>
-# cut radius to which stop the extrapolation (unit: kpc)
-sbpexp_rcut = <RCUT>
-# output of the extrapolated SBP
-sbpexp_outfile = sbpexp.csv
-# extrapolation model information
-sbpexp_json = sbpexp.json
-# plot of the SBP extrapolation
-sbpexp_image = sbpexp.png
-
-## Density profiles
-# deprojected 3D electron number density profile
-ne_profile = ne_profile.txt
-# deprojected 3D gas mass density profile
-rho_gas_profile = rho_gas_profile.txt
-# image of the density profiles (electron density and/or gas density)
-density_profile_image = density_profile.png
-------------------------------------------------------------
 """
 
 import argparse
@@ -184,6 +147,42 @@ from fitting_models import PLCModel
 from spline import SmoothSpline
 
 plt.style.use("ggplot")
+
+config_default = """
+## Configuration for `deproject_sbp.py`
+
+# config file for SBP fitting (e.g., sbpfit.conf)
+sbpfit_config = sbpfit.conf
+
+# input cooling function profile
+coolfunc_profile = coolfunc_profile.txt
+
+# redshift of the object (for pixel to distance conversion)
+#redshift = <REDSHIFT>
+
+## SBP extrapolation
+# ignorance radius from which the SBP is fitted for extrapolation,
+# specified by the ratio w.r.t sbpfit rc (default: 1.2 * rc)
+sbpexp_rignore_ratio = 1.2
+# or directly specify the ignorance radius (override above) (unit: pixel)
+#sbpexp_rignore = <RIGNORE>
+# cut radius to which stop the extrapolation (unit: kpc)
+sbpexp_rcut = 3000
+# output of the extrapolated SBP
+sbpexp_outfile = sbpexp.csv
+# extrapolation model information
+sbpexp_json = sbpexp.json
+# plot of the SBP extrapolation
+sbpexp_image = sbpexp.png
+
+## Density profiles
+# deprojected 3D electron number density profile
+ne_profile = ne_profile.txt
+# deprojected 3D gas mass density profile
+rho_gas_profile = rho_gas_profile.txt
+# image of the density profiles (electron density and/or gas density)
+density_profile_image = density_profile.png
+"""
 
 
 class SBP:
@@ -434,9 +433,9 @@ class BrightnessProfile:
     ne = None
     # calculated gas mass density profile
     rho_gas = None
-    # fitted smoothing spline to the SBP
+    # fitted `SmoothSpline` object of the SBP
     s_spline = None
-    # fitted smoothing spline to the cooling function profile
+    # fitted `SmoothSpline` of the cooling function profile
     cf_spline = None
 
     def __init__(self, sbp_data, cf_data, z):
@@ -626,8 +625,6 @@ class BrightnessProfile:
         fig.tight_layout()
         return (fig, ax, ax2)
 
-######################################################################
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -637,7 +634,9 @@ def main():
                              "(default: sbpdeproj.conf)")
     args = parser.parse_args()
 
-    config = ConfigObj(args.config)
+    config = ConfigObj(config_default.splitlines())
+    config_user = ConfigObj(args.config)
+    config.merge(config_user)
     sbpfit_conf = ConfigObj(config["sbpfit_config"])
     try:
         sbpfit_outfile = sbpfit_conf[sbpfit_conf["model"]]["outfile"]
