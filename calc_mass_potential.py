@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-06-24
-# Updated: 2016-07-10
+# Updated: 2016-07-11
 #
 # Change logs:
+# 2016-07-11:
+#   * Use a default config to allow a minimal user config
 # 2016-07-10:
 #   * Allow disable the calculation of potential profile
 #   * Use class 'SmoothSpline' from module 'spline.py'
@@ -111,12 +113,29 @@ References:
 [1] Ettori et al., 2013, Space Science Review, 177, 119-154
 [2] Walker et al., 2012, MNRAS, 422, 3503
 [3] Tremaine & Binney, Galactic Dynamics, 2nd edition, 2008
+"""
 
 
-Sample configuration file:
-------------------------------------------------------------
+import argparse
+
+import numpy as np
+import astropy.units as au
+import astropy.constants as ac
+import scipy.integrate as integrate
+from scipy.misc import derivative
+from configobj import ConfigObj
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+
+from astro_params import AstroParams, ChandraPixel
+from projection import Projection
+from spline import SmoothSpline
+
+plt.style.use("ggplot")
+
+config_default = """
 ## Configuration for `calc_mass_potential.py`
-## Date: 2016-06-28
 
 # electron density profile
 ne_profile = ne_profile.txt
@@ -146,26 +165,7 @@ rho_total_profile_image = rho_total_profile.png
 # NOTE: to disable potential calculation, do not specified the output files
 potential_profile = potential_profile.txt
 potential_profile_image = potential_profile.png
-------------------------------------------------------------
 """
-
-import argparse
-
-import numpy as np
-import astropy.units as au
-import astropy.constants as ac
-import scipy.integrate as integrate
-from scipy.misc import derivative
-from configobj import ConfigObj
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from matplotlib.figure import Figure
-
-from astro_params import AstroParams, ChandraPixel
-from projection import Projection
-from spline import SmoothSpline
-
-plt.style.use("ggplot")
 
 
 class DensityProfile:
@@ -603,11 +603,14 @@ class DensityProfile:
 def main():
     parser = argparse.ArgumentParser(
             description="Calculate the mass and potential profiles")
-    parser.add_argument("config", nargs="?", default="mass_potential.conf",
-                        help="config for mass and potential profiles " +
-                             "calculation (default: mass_potential.conf)")
+    parser.add_argument("config", nargs="?",
+                        help="additional config")
     args = parser.parse_args()
-    config = ConfigObj(args.config)
+
+    config = ConfigObj(config_default.splitlines())
+    if args.config != "":
+        config_user = ConfigObj(args.config)
+        config.merge(config_user)
 
     ne_profile = np.loadtxt(config["ne_profile"])
     cf_profile = np.loadtxt(config["cf_profile"])
