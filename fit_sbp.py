@@ -3,9 +3,11 @@
 #
 # Aaron LI
 # Created: 2016-03-13
-# Updated: 2016-07-04
+# Updated: 2016-07-12
 #
 # Change logs:
+# 2016-07-12:
+#   * Use a default config to allow a minimal user config
 # 2016-07-04:
 #   * Remove unused classes "FitModelSBetaNorm" and "FitModelDBetaNorm"
 #   * Fix minor typo
@@ -61,12 +63,28 @@ Fit the surface brightness profile (SBP) with the single-beta model:
 or the double-beta model:
   s(r) = s01 * [1.0 + (r/rc1)^2] ^ (0.5-3*beta1) +
          s02 * [1.0 + (r/rc2)^2] ^ (0.5-3*beta2) + bkg
+"""
 
 
-Sample configuration file:
--------------------------------------------------
+import sys
+import argparse
+import json
+from collections import OrderedDict
+
+import numpy as np
+import lmfit
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+from configobj import ConfigObj
+
+__version__ = "0.7.0"
+__date__ = "2016-05-06"
+
+plt.style.use("ggplot")
+
+config_default = """
 ## Configuration for `fit_sbp.py`
-## Date: 2016-05-06
 
 name     = <NAME>
 obsid    = <OBSID>
@@ -120,25 +138,7 @@ imgfile     = sbpfit_dbeta.png
   rc2   = 30.0,    2.0,  5.0e2
   beta2 = 0.7,     0.3,  1.1
   bkg   = 1.0e-10, 0.0,  1.0e-8
--------------------------------------------------
 """
-
-import sys
-import argparse
-import json
-from collections import OrderedDict
-
-import numpy as np
-import lmfit
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from matplotlib.figure import Figure
-from configobj import ConfigObj
-
-__version__ = "0.7.0"
-__date__ = "2016-05-06"
-
-plt.style.use("ggplot")
 
 
 class FitModel:
@@ -791,7 +791,9 @@ def main():
     #
     args = parser.parse_args()
 
-    config = ConfigObj(args.config)
+    config = ConfigObj(config_default.splitlines())
+    config_user = ConfigObj(open(args.config))
+    config.merge(config_user)
 
     # determine the model name
     if args.sbeta:
