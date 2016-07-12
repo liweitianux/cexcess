@@ -7,6 +7,7 @@
 #
 # Change logs:
 # 2016-07-12:
+#   * Remove "__version__" and "__date__"
 #   * Use a default config to allow a minimal user config
 # 2016-07-04:
 #   * Remove unused classes "FitModelSBetaNorm" and "FitModelDBetaNorm"
@@ -77,9 +78,6 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from configobj import ConfigObj
-
-__version__ = "0.7.0"
-__date__ = "2016-05-06"
 
 plt.style.use("ggplot")
 
@@ -774,11 +772,7 @@ def main():
     # parser for command line options and arguments
     parser = argparse.ArgumentParser(
             description="Fit surface brightness profile with " +
-                        "single-/double-beta model",
-            epilog="Version: %s (%s)" % (__version__, __date__))
-    parser.add_argument("-V", "--version", action="version",
-                        version="%(prog)s " +
-                                "%s (%s)" % (__version__, __date__))
+                        "single-/double-beta model")
     parser.add_argument("config", help="Config file for SBP fitting")
     # exclusive argument group for model selection
     grp_model = parser.add_mutually_exclusive_group(required=False)
