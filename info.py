@@ -1,9 +1,11 @@
 #
 # Aaron LI
 # Created: 2016-05-04
-# Updated: 2016-07-11
+# Updated: 2016-07-12
 #
 # Change logs:
+# 2016-07-12:
+#   * Add functions "get_name()" and "get_obsid()"
 # 2016-07-11:
 #   * Add functions "get_redshift()" and "get_nh()"
 #   * Add function "get_owner()"
@@ -42,6 +44,29 @@ def get_owner(info):
         return "ZZH"
     else:
         return "LWT"
+
+
+def get_name(info):
+    """
+    Get the source name from the INFO json file.
+    """
+    info = load_info(info)
+    name = info["Source Name"]
+    uname = info.get("Unified Name")
+    results = {
+        "name": name,
+        "uname": uname,
+    }
+    return results
+
+
+def get_obsid(info):
+    """
+    Get the Chandra observation ID from the INFO json file.
+    """
+    info = load_info(info)
+    obsid = int(info["Obs. ID"])
+    return obsid
 
 
 def get_r500(info):
