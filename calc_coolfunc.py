@@ -4,9 +4,11 @@
 #
 # Aaron LI
 # Created: 2016-06-19
-# Updated: 2016-07-11
+# Updated: 2016-07-13
 #
 # Change logs:
+# 2016-07-13:
+#   * Add check of the existence of t_profile
 # 2016-07-11:
 #   * Use a default config to allow a minimal user config
 # 2016-07-04:
@@ -186,6 +188,9 @@ def main():
     config = ConfigObj(config_default.splitlines())
     config_user = ConfigObj(args.config)
     config.merge(config_user)
+
+    if not os.path.exists(config["t_profile"]):
+        raise FileNotFoundError("file not exists: %s" % config["t_profile"])
 
     redshift = config.as_float("redshift")
     config_data = {
