@@ -64,7 +64,7 @@ def main():
     parser.add_argument("-j", "--json", dest="json", required=False,
                         help="the *_INFO.json file " +
                              "(default: find ../*_INFO.json)")
-    parser.add_argument("outfile", nargs="?",
+    parser.add_argument("outfile", nargs="?", default="sbpfit.conf",
                         help="filename of the output sbpfit config " +
                              "(default: sbpfit.conf)")
     args = parser.parse_args()
