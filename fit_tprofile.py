@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-07-04
-# Updated: 2016-07-11
+# Updated: 2016-07-13
 #
 # Change logs:
+# 2016-07-13:
+#   * Force the input temperature data to be 2D
 # 2016-07-11:
 #   * Use a default config to allow a minimal user config
 # 2016-07-04:
@@ -219,14 +221,14 @@ def main():
     parser = argparse.ArgumentParser(
         description="temperature profile fit, interpolate and extrapolate")
     parser.add_argument("config", nargs="?", default="tprofile.conf",
-                        help="configuration (default: tprofile.conf")
+                        help="configuration (default: tprofile.conf)")
     args = parser.parse_args()
 
     config = ConfigObj(config_default.splitlines())
     config_user = ConfigObj(args.config)
     config.merge(config_user)
 
-    tprofile_data = np.loadtxt(config["t_profile_data"])
+    tprofile_data = np.loadtxt(config["t_profile_data"], ndmin=2)
     redshift = config.as_float("redshift")
 
     tprofile = TemperatureProfile(tprofile_data, redshift)
