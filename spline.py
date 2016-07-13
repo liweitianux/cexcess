@@ -2,7 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-07-10
-# Updated: 2016-07-10
+# Updated: 2016-07-13
+#
+# Change logs:
+# 2016-07-13:
+#   * Improve the `np.array` usage a bit
 #
 
 """
@@ -83,9 +87,7 @@ class SmoothSpline(Spline):
             weights=weights, method="REML")
 
     def eval(self, x):
-        x = np.array(x)
-        if x.shape == ():
-            x = x.reshape((1,))
+        x = np.array(x, ndmin=1)
         if "X" in self.log10:
             x_new = ro.ListVector({"x": ro.FloatVector(np.log10(x))})
         else:
