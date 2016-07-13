@@ -3,7 +3,7 @@
 # Make the configuration file for `calc_coolfunc.py`
 #
 # Aaron LI
-# Created: 2016-04-21
+# Created: 2016-07-12
 # Updated: 2016-07-12
 #
 
@@ -50,7 +50,7 @@ def get_abund(infile):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Make the config for 'fit_sbp.py'")
+        description="Make the config for 'calc_coolfunc.py'")
     parser.add_argument("-j", "--json", dest="json", required=False,
                         help="the *_INFO.json file " +
                              "(default: find ../*_INFO.json)")
