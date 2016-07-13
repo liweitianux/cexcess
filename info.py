@@ -127,5 +127,5 @@ def get_nh(info):
     if get_owner(info) == "LWT":
         nh = float(info["nH (10^22 cm^-2)"])
     else:
-        nh = float(info["nH"])
+        nh = float(info["nh"])
     return nh
