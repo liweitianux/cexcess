@@ -47,17 +47,15 @@ analyze_path() {
 case "$1" in
     -[hH]*)
         echo "Usage:"
-        echo "    `basename $0` <path1> ..."
+        echo "    `basename $0` [ path ]"
         exit 1
         ;;
 esac
 
-echo "NAME,OI,PATH"
-while [ ! -z "$1" ]; do
-    path="$1"
-    shift
-    name=`analyze_path "${path}" | grep '^name:' | awk '{ print $2 }'`
-    oi=`analyze_path "${path}" | grep '^oi:' | awk '{ print $2 }'`
-    echo "${name},${oi},${path}"
-done
+if [ -z "$1" ]; then
+    DIR="${PWD}"
+else
+    DIR="$1"
+fi
 
+analyze_path "${DIR}"
