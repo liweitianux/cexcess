@@ -8,6 +8,7 @@
 #
 # Change logs:
 # 2016-07-13:
+#   * Error on missing user config file
 #   * Add check of the existence of t_profile
 # 2016-07-11:
 #   * Use a default config to allow a minimal user config
@@ -67,16 +68,16 @@ config_default = """
 t_profile = t_profile.txt
 
 # average abundance (unit: solar)
-abundance = -1
+abundance = <ABUNDANCE>
 
 # abundance table (default: grsa)
 abund_table = grsa
 
 # redshift of the object
-redshift = -1
+redshift = <REDSHIFT>
 
 # H column density (unit: 10^22 cm^-2)
-nh = -1
+nh = <NH>
 
 # energy range within which to calculate the cooling function (unit: keV)
 energy_low = 0.7
@@ -186,7 +187,7 @@ def main():
     args = parser.parse_args()
 
     config = ConfigObj(config_default.splitlines())
-    config_user = ConfigObj(args.config)
+    config_user = ConfigObj(open(args.config))
     config.merge(config_user)
 
     if not os.path.exists(config["t_profile"]):

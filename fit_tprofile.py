@@ -6,6 +6,7 @@
 #
 # Change logs:
 # 2016-07-13:
+#   * Error on missing user config file
 #   * Force the input temperature data to be 2D
 # 2016-07-11:
 #   * Use a default config to allow a minimal user config
@@ -44,7 +45,7 @@ config_default = """
 ## Configuration for `fit_tprofile.py`
 
 # redshift of the object (for pixel to distance conversion)
-redshift = -1
+redshift = <REDSHIFT>
 
 # input temperature profile data file
 t_profile_data = t_profile_data.txt
@@ -225,7 +226,7 @@ def main():
     args = parser.parse_args()
 
     config = ConfigObj(config_default.splitlines())
-    config_user = ConfigObj(args.config)
+    config_user = ConfigObj(open(args.config))
     config.merge(config_user)
 
     tprofile_data = np.loadtxt(config["t_profile_data"], ndmin=2)
