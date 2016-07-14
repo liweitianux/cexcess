@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-07-10
-# Updated: 2016-07-13
+# Updated: 2016-07-14
 #
 # Change logs:
+# 2016-07-14:
+#   * Workaround the spline fitting error when give constant input y data
 # 2016-07-13:
 #   * Improve the `np.array` usage a bit
 #
@@ -16,9 +18,12 @@ and/or extrapolate a group of discrete data.
 * smoothing spline: R's mgcv::gam()
 """
 
+import sys
+
 import numpy as np
 import rpy2.robjects as ro
 from rpy2.robjects.packages import importr
+from rpy2.rinterface import RRuntimeError
 
 
 class Spline:
@@ -81,10 +86,24 @@ class SmoothSpline(Spline):
         else:
             y = ro.FloatVector(self.y)
         weights = ro.FloatVector(self.weights)
-        self.spline = self.mgcv.gam(
-            ro.Formula("y ~ s(x, bs='ps')"),
-            data=ro.DataFrame({"x": x, "y": y}),
-            weights=weights, method="REML")
+        try:
+            self.spline = self.mgcv.gam(
+                ro.Formula("y ~ s(x, bs='ps')"),
+                data=ro.DataFrame({"x": x, "y": y}),
+                weights=weights, method="REML")
+        except RRuntimeError:
+            # NOTE:
+            # If the input y data is constant (e.g., the temperature profile
+            # has only ONE data point), then above smoothing spline fitting
+            # using method "REML" will failed with error:
+            #     Error in gam.reparam(UrS, sp, grderiv) :
+            #       NA/NaN/Inf in foreign function call (arg 3)
+            print("WARNING: 'mgcv.gam()' using method 'REML' failed!",
+                  file=sys.stderr)
+            self.spline = self.mgcv.gam(
+                ro.Formula("y ~ s(x, bs='ps', sp=0.6)"),
+                data=ro.DataFrame({"x": x, "y": y}),
+                weights=weights)
 
     def eval(self, x):
         x = np.array(x, ndmin=1)
