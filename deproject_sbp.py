@@ -635,9 +635,9 @@ def main():
     args = parser.parse_args()
 
     config = ConfigObj(config_default.splitlines())
-    config_user = ConfigObj(args.config)
+    config_user = ConfigObj(open(args.config))
     config.merge(config_user)
-    sbpfit_conf = ConfigObj(config["sbpfit_config"])
+    sbpfit_conf = ConfigObj(open(config["sbpfit_config"]))
     try:
         sbpfit_outfile = sbpfit_conf[sbpfit_conf["model"]]["outfile"]
     except KeyError:
