@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-06-10
-# Updated: 2016-07-11
+# Updated: 2016-07-15
 #
 # Change logs:
+# 2016-07-15:
+#   * Do not repeat electron number density calculation
 # 2016-07-11:
 #   * Use a default config to allow a minimal user config
 # 2016-07-10:
@@ -540,10 +542,11 @@ class BrightnessProfile:
 
         unit: [ g cm^-3 ] if the units converted for input data
         """
-        ne = self.calc_electron_density()
-        rho = ne * AstroParams.mu_e * AstroParams.m_atom
-        self.rho_gas = rho
-        return rho
+        if self.ne is None:
+            self.calc_electron_density()
+        rho_gas = self.ne * AstroParams.mu_e * AstroParams.m_atom
+        self.rho_gas = rho_gas
+        return rho_gas
 
     def save(self, density_type, outfile):
         if density_type == "electron":
