@@ -98,6 +98,9 @@ class SmoothSpline(Spline):
             # using method "REML" will failed with error:
             #     Error in gam.reparam(UrS, sp, grderiv) :
             #       NA/NaN/Inf in foreign function call (arg 3)
+            # or with error:
+            #     Error in eigen(hess1, symmetric = TRUE) :
+            #       infinite or missing values in 'x'
             print("WARNING: 'mgcv.gam()' using method 'REML' failed!",
                   file=sys.stderr)
             self.spline = self.mgcv.gam(
