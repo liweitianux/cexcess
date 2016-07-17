@@ -2,9 +2,11 @@
 #
 # Aaron LI
 # Created: 2016-06-10
-# Updated: 2016-07-15
+# Updated: 2016-07-17
 #
 # Change logs:
+# 2016-07-17:
+#   * Ignore non-finite numbers of deprojected density for plot
 # 2016-07-15:
 #   * Do not repeat electron number density calculation
 # 2016-07-11:
@@ -612,11 +614,12 @@ class BrightnessProfile:
         ax.set_ylabel(r"Surface brightness (%s)" % s_unit)
         # deprojected density profile
         ax2 = ax.twinx()
-        line2, = ax2.plot(r, density, color="black",
+        mask = np.isfinite(density)
+        line2, = ax2.plot(r[mask], density[mask], color="black",
                           linestyle="solid", linewidth=2,
                           label="Density profile")
-        d_min = min(density) / 1.2
-        d_max = max(density) * 1.2
+        d_min = min(density[mask]) / 1.2
+        d_max = max(density[mask]) * 1.2
         ax2.set_xlim(r_min, r_max)
         ax2.set_ylim(d_min, d_max)
         ax2.set_yscale(ax.get_yscale())
