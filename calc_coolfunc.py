@@ -4,9 +4,11 @@
 #
 # Aaron LI
 # Created: 2016-06-19
-# Updated: 2016-07-13
+# Updated: 2017-02-09
 #
 # Change logs:
+# 2017-02-09:
+#   * Fix a minor error of the default 'energy_high' value
 # 2016-07-13:
 #   * Error on missing user config file
 #   * Add check of the existence of t_profile
@@ -204,7 +206,7 @@ def main():
         "redshift":     redshift,
         "nh":           config.as_float("nh"),
         "energy_low":   float(config.get("energy_low", 0.7)),
-        "energy_high":  float(config.get("energy_high", 0.7)),
+        "energy_high":  float(config.get("energy_high", 7.0)),
         "xspec_script": config["xspec_script"],
         "coolfunc":     config["coolfunc"],
         "apec_norm":    calc_apec_norm(z=redshift),
