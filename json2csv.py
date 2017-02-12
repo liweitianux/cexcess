@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Read results in JSON format and output as CSV format.
 #
-# Aaron LI
 # Created: 2016-04-27
 # Updated: 2016-05-06
 #

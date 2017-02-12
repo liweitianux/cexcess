@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2016 Aaron LI
+# MIT license
 #
 # Credit:
 # [1]  Radially averaged power spectrum of 2D real-valued matrix
@@ -11,11 +13,9 @@
 # * If the input image is NOT SQUARE; then are the horizontal frequencies
 #   the same as the vertical frequencies ??
 #
-# Aaron LI <aaronly.me@gmail.com>
 # Created: 2015-04-22
-# Updated: 2016-05-09
 #
-# Change log:
+# Change logs:
 # 2016-05-09:
 #   * PEP8 fixes
 # 2016-05-01:

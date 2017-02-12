@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Make the configuration file for `calc_overdensity.py`
 #
-# Aaron LI
 # Created: 2016-07-13
-# Updated: 2016-07-13
 #
 
 import glob

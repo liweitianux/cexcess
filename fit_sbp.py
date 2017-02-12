@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
-# Aaron LI
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Created: 2016-03-13
-# Updated: 2016-07-12
 #
 # Change logs:
 # 2016-07-12:

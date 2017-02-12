@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2016 Aaron LI
+# MIT license
 #
 # Make the configuration file for the `sbp_fit.py`.
 # The name, obsid, r500 information is extracted from the '*_INFO.json' file.
 #
-# Aaron LI
 # Created: 2016-04-21
-# Updated: 2016-07-12
 #
 # Change logs:
 # 2016-07-12:

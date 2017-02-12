@@ -1,7 +1,7 @@
+# Copyright (c) 2016 Aaron LI
+# MIT license
 #
-# Aaron LI
 # Created: 2016-05-04
-# Updated: 2016-07-12
 #
 # Change logs:
 # 2016-07-12:

@@ -1,12 +1,13 @@
 #!/bin/sh
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Make the corresponding stowed bacground image for the observation.
 #
 # Based on `ciao_blanksky.sh' (v5.0; 2015-06-02)
 #
-# Aaron LI
 # Created: 2016-04-20
-# Updated: 2016-04-28
 #
 # Changelog:
 # 2016-04-28:

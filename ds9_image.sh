@@ -1,10 +1,12 @@
 #!/bin/sh
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Use DS9 to visualize the ACIS image, with useful/handy
 # arguments/options passed.
 # Also touch the output image filename for easier save.
 #
-# Aaron LI
 # Created: 2016-04-16
 # Updated: 2016-05-08
 #

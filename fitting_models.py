@@ -1,8 +1,7 @@
-# -*- mode: python; coding: utf-8 -*-
+# Copyright (c) 2016 Aaron LI
+# MIT license
 #
-# Weitan LI
 # Created: 2016-06-26
-# Updated: 2016-07-04
 #
 # Change logs:
 # 2016-07-04:

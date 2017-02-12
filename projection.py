@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 #
-# Aaron LI
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Created: 2016-06-10
 # Updated: 2016-06-24
 #

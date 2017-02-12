@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2016 Aaron LI
+# MIT license
 #
 # Extract the power excess index (PEI) results.
 #
-# Aaron LI
 # Created: 2016-04-29
 #
 
 import sys
-import os
 import json
 import csv
 import argparse
@@ -50,4 +50,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

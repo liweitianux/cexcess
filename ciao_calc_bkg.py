@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Calculate the *background surface brightness (SB)* level from the
 # *corrected background spectrum*.
 # The calculated background SB value is used to provide constraint for
@@ -7,9 +10,7 @@
 # subtract the background contribution before carrying out the SBP
 # deprojection.
 #
-# Aaron LI
 # Created: 2016-06-10
-# Updated: 2016-06-10
 #
 
 import argparse

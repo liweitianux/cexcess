@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Based on 'coolfunc_calc.sh' from 'chandra-acis-analysis/mass_profile'.
 #
-# Aaron LI
 # Created: 2016-06-19
-# Updated: 2017-02-09
 #
 # Change logs:
 # 2017-02-09:

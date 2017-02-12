@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Extract surface brightness profile, with optional background
 # subtraction and region exclusion.
 #
@@ -25,9 +28,7 @@
 #     process that intersect with the CCD boundaries (extracted from the
 #     `skyfov.fits`).
 #
-# Aaron LI
 # Created: 2016-05-17
-# Updated: 2016-06-07
 #
 # Change log:
 # 2016-06-07:

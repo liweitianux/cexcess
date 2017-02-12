@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Calculate the surface brightness concentration (i.e., C_{SB}), which
 # is an index/indicator of the cool core, and may be defined as:
 #   (1) brightness(<=40kpc) / brightness(<=400kpc)
@@ -8,9 +11,7 @@
 # References:
 # [1] Santos, J. S., Rosati, P., Tozi, P., et al. 2008, A&A, 483, 35
 #
-# Aaron LI
 # Created: 2016-04-28
-# Updated: 2016-06-07
 #
 # Change log:
 # 2016-06-07:

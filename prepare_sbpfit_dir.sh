@@ -1,11 +1,12 @@
 #!/bin/sh
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Create the new `sbpfit' subdirectory, and prepare the files for fitting
 # the surface brightness profile.
 #
-# Aaron LI
 # Created: 2016-03-28
-# Updated: 2016-04-26
 #
 # Changelog:
 # 2016-04-26:
@@ -39,4 +40,3 @@ while [ ! -z "$1" ]; do
     ln -sv ${img_dir}/evt2_c*_clean.fits .
     ln -sv ${img_dir}/*_img_*_fill.png .
 done
-

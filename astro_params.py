@@ -1,8 +1,7 @@
-# -*- mode: python -*-
+# Copyright (c) 2016 Aaron LI
+# MIT license
 #
-# Aaron LI
 # Created: 2016-06-24
-# Updated: 2016-06-24
 #
 # Change logs:
 # 2016-06-24:

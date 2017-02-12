@@ -1,8 +1,10 @@
 #!/bin/sh
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Collect the fitting results and orgnize in CSV format.
 #
-# Aaron LI
 # Created: 2016-03-29
 #
 
@@ -82,4 +84,3 @@ cat $1 | while read sbpfit_dir; do
         printf ",,,,,,,,,,,,,,,,,,,,,,\n"
     fi
 done
-

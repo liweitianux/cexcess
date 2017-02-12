@@ -1,5 +1,8 @@
 #!/bin/sh
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Rotate the FITS image to be upright using 'dmregrid2',
 # and crop the blank edges from the rotated image
 # according to the CCDs sizes.
@@ -21,7 +24,6 @@
 # keywords/attributes in the FITS header.
 #
 #
-# Aaron LI
 # Created: 2015-08-23
 # Updated: 2016-04-11
 #
@@ -102,4 +104,3 @@ echo "using 'dmregrid2', the filled regions are *EXCLUDED* in the rotated"
 echo "image!"
 echo "*** CHECK THE RESULTS BEFORE PROCEDDING ***"
 echo "==================================================================="
-

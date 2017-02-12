@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2016 Aaron LI
+# MIT license
 #
 # Extract the sbpfit results, and output in CSV format.
 #
-# Aaron LI
 # Created: 2016-04-27
 #
 
@@ -89,4 +90,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

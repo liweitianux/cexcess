@@ -1,14 +1,15 @@
 #!/bin/sh
 #
+# Copyright (c) 2016 Aaron LI
+# MIT license
+#
 # Generate the exposure map and apply exposure correction
 # using CIAO `fluximage`.
 #
 # NOTE:
 # The existing "instmap_weights.txt" is ued for exposure map generation.
 #
-# Aaron LI
 # Created: 2016-04-28
-# Updated: 2016-04-28
 #
 
 case "$1" in
@@ -52,4 +53,3 @@ ln -svf ${ROOTNAME}*band*thresh.img img_${ROOTNAME}_thresh.fits
 ln -svf ${ROOTNAME}*band*thresh.expmap expmap_${ROOTNAME}.fits
 # exposure-corrected image
 ln -svf ${ROOTNAME}*band*flux.img img_expcorr_${ROOTNAME}.fits
-

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2016 Aaron LI
+# MIT license
 #
 # Extract R500 from the '*_INFO.json' file, and center coordinate from
 # existing "sbprofile.reg", and then make the circle regions w.r.t R500
 # in order to visualize the FoV coverage of the observations.
 #
-# Aaron LI
 # Created: 2016-04-22
-# Updated: 2016-04-27
 #
-# Changelog:
+# Change log:
 # 2016-04-27:
 #   * Do not import the unused "re" module
 #
@@ -164,4 +164,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
