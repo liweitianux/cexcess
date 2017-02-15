@@ -11,6 +11,11 @@ Get the SDSS image around a specified position using the
   http://skyserver.sdss.org/dr13/en/help/docs/api.aspx#imgcutout
 * Image List Tool help:
   http://skyserver.sdss.org/dr13/en/tools/started/list.aspx
+* Science Archive Server (SAS): coverage check:
+  https://dr12.sdss.org/coverageCheck
+* Science Archive Server (SAS): single field search
+  https://dr12.sdss.org/fields
+  Can get images of u, g, r, i, z bands in FITS format
 """
 
 import os
