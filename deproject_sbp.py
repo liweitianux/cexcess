@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2016 Aaron LI
+# Copyright (c) 2016-2017 Aaron LI
 # MIT license
 #
 # Created: 2016-06-10
 #
 # Change logs:
+# 2017-04-02:
+#   * Fix reference journal
 # 2016-07-17:
 #   * Ignore non-finite numbers of deprojected density for plot
 # 2016-07-15:
@@ -126,7 +128,7 @@ where 'A' is the solid angle (i.e., area covered by the source).
 
 References:
 [1] Croston et al. 2006, A&A, 459, 1007-1019
-[2] McLaughlin, 1999, ApJ, 117, 2398-2427
+[2] McLaughlin, 1999, AJ, 117, 2398-2427
 [3] Bouchet, 1995, A&AS, 113, 167
 [4] Ettori et al, 2013, Space Science Review, 177, 119-154
 [5] AtomDB / APEC model:
