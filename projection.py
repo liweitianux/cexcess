@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2016 Aaron LI
+# Copyright (c) 2016-2017 Aaron LI
 # MIT license
 #
 # Created: 2016-06-10
-# Updated: 2016-06-24
 #
 
 """
 Project the 3D volume density to 2D surface density and vice versa.
 
 References:
-[1] McLaughlin, 1999, ApJ, 117, 2398-2427
+[1] McLaughlin, D. E.,
+    The Efficiency of Globular Cluster Formation,
+    1999, AJ, 117, 2398-2427,
+    http://adsabs.harvard.edu/abs/1999AJ....117.2398M
+    Appendix.A
 """
 
 import numpy as np
